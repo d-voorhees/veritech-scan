@@ -1,4 +1,3 @@
-# veritech-scan
 # Veritech Scan
 
 **Evidence-first technical pre-screening for web-business acquisitions.**
