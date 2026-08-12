@@ -1,0 +1,47 @@
+{
+	# Global options
+	email admin@veritechdiligence.com
+}
+
+{$APP_DOMAIN} {
+	encode zstd gzip
+
+	# Conservative request body limit — this app never accepts uploads.
+	request_body {
+		max_size 5MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+		-Server
+	}
+
+	handle /health {
+		reverse_proxy api:8000
+	}
+
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}
+
+:80 {
+	# Fallback for health checks over plain HTTP / IP access before DNS cutover.
+	handle /health {
+		reverse_proxy api:8000
+	}
+	respond "Veritech Scan" 200
+}
