@@ -79,27 +79,33 @@ enforcement of ownership — see "Non-goals" below.
 - Public signup is not implemented; users are created via the seed/admin
   bootstrap command only (invite-only by design).
 
-## Worker isolation
+## Scan-runner isolation
 
-- The worker runs Playwright in **one ephemeral browser context per scan
+- The runner runs Playwright in **one ephemeral browser context per scan
   step** (`app/collectors/browser_render.py`) — no `storage_state` is loaded
   or persisted, so cookies set during the visit do not survive past that
   single collection step.
-- The worker never stores request bodies, form data, session data, or
+- The runner never stores request bodies, form data, session data, or
   cookies as evidence — only request hostnames, resource types, and
   console/error text.
-- `SCAN_WORKER_CONCURRENCY=1`: one scan runs at a time, bounding both
-  resource usage and the blast radius of any single scan behaving
-  unexpectedly.
-- The worker container publishes no ports and has no inbound network
-  surface at all.
+- **One scan per Machine, by construction.** Each scan gets its own
+  on-demand Fly Machine (`app/services/scan_orchestrator.py::
+  request_scan_runner`), so there is no shared process/memory between
+  scans and no concurrency-limit knob needed — the isolation is structural,
+  not configured.
+- The scan-runner Machine listens for no inbound HTTP traffic at all — it
+  only reads its `SCAN_ID` and writes to Postgres and the target site.
+- A runner is guarded against duplicate processing: `app/runner/run.py`
+  atomically claims a scan (`UPDATE ... WHERE status IN
+  ('queued','starting')`) before doing any work, so two runners racing on
+  the same scan ID can't both process it.
 
 ## Rate limiting
 
 - **Scan creation**: `apps/api/app/core/rate_limit.py` enforces
-  `SCAN_CREATE_RATE_LIMIT_PER_HOUR` (default 10) per user via a Redis
-  counter with a 1-hour TTL, checked before target validation in
-  `POST /api/v1/scans`.
+  `SCAN_CREATE_RATE_LIMIT_PER_HOUR` (default 10) per user via a rolling
+  1-hour count of that user's `scan_requests` rows in Postgres, checked
+  before target validation in `POST /api/v1/scans`.
 - **Outbound requests to the target**: every collector that makes multiple
   requests (crawler, robots/sitemap) respects
   `SCAN_DEFAULT_REQUEST_DELAY_SECONDS` between requests to the same target.
@@ -135,6 +141,6 @@ Veritech Scan does **not**:
   natural post-MVP hardening step — see `docs/security-hardening.md`.
 - Implement DKIM discovery (SPF and DMARC only in the MVP; see
   `docs/rules-engine.md` for the documented extension point).
-- Provide high availability, automatic failover, or multi-worker scaling —
-  this is explicitly a single-VM, single-worker MVP (see
-  `docs/operations.md` for free-tier constraints).
+- Provide high availability or automatic failover for the database — a
+  single Postgres instance is the one persistent, paid dependency of this
+  architecture (see `docs/fly-deployment.md`).

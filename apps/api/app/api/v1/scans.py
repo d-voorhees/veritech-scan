@@ -14,9 +14,10 @@ from app.models.user import User
 from app.schemas.evidence import EvidenceItemOut, FindingOut
 from app.schemas.report import ReportOut
 from app.schemas.scan import ScanCreateRequest, ScanDetailOut, ScanEventOut, ScanSummaryOut
+from app.services.fly_machines import FlyMachinesError
 from app.services.html_export import render_report_html
 from app.services.report_builder import build_report
-from app.services.scan_orchestrator import create_scan, enqueue_scan
+from app.services.scan_orchestrator import create_scan, request_scan_runner
 
 router = APIRouter(prefix="/scans", tags=["scans"])
 
@@ -37,7 +38,7 @@ def create_scan_endpoint(
     user: User = Depends(get_current_user),
 ) -> ScanDetailOut:
     try:
-        enforce_scan_creation_rate_limit(user.id)
+        enforce_scan_creation_rate_limit(db, user.id)
     except RateLimitExceeded as exc:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(exc)) from exc
 
@@ -46,7 +47,18 @@ def create_scan_endpoint(
     except UnsafeTargetError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
 
-    enqueue_scan(scan.id)
+    try:
+        request_scan_runner(db, scan)
+    except FlyMachinesError as exc:
+        # request_scan_runner() has already marked the scan `failed` and
+        # recorded the failure event — never leave a scan appearing to be
+        # queued/running when its runner never actually started.
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to start the scan runner; the scan has been marked as failed.",
+        ) from exc
+
+    db.refresh(scan)
     return scan
 
 

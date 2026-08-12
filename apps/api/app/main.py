@@ -7,7 +7,6 @@ from sqlalchemy import text
 from app.api.v1.auth import router as auth_router
 from app.api.v1.scans import router as scans_router
 from app.config import get_settings
-from app.core.rate_limit import get_redis_client
 from app.db import SessionLocal
 from app.logging_config import configure_logging, get_logger
 
@@ -39,10 +38,12 @@ app.include_router(scans_router, prefix="/api/v1")
 
 @app.get("/health")
 def health() -> Response:
-    """Internal readiness check: verifies Postgres and Redis connectivity.
-    Exposed publicly only through Caddy's /health route.
+    """Readiness check: verifies Postgres connectivity. Used by Fly's
+    http_service health check (proxied through Next.js — see
+    next.config.mjs's rewrite for /health) to decide whether the web/API
+    Machine is ready to receive traffic after an autostart.
     """
-    checks = {"postgres": False, "redis": False}
+    checks = {"postgres": False}
 
     try:
         db = SessionLocal()
@@ -53,12 +54,6 @@ def health() -> Response:
             db.close()
     except Exception as exc:  # noqa: BLE001
         logger.warning("health_check_postgres_failed", error=str(exc))
-
-    try:
-        get_redis_client().ping()
-        checks["redis"] = True
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("health_check_redis_failed", error=str(exc))
 
     healthy = all(checks.values())
     payload = {"status": "ok" if healthy else "degraded", "checks": checks}

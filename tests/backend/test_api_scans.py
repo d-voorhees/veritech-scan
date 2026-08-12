@@ -7,12 +7,13 @@ from app.main import app as fastapi_app
 
 @pytest.fixture()
 def client(monkeypatch):
-    # Scan creation must not depend on Redis (rate limiting) or a running
-    # Dramatiq broker (enqueue) in unit tests.
+    # Scan creation must not depend on a real Fly Machines API call or
+    # database rate-limit bookkeeping in unit tests unless a test wants to
+    # exercise that behavior explicitly.
     import app.api.v1.scans as scans_module
 
-    monkeypatch.setattr(scans_module, "enqueue_scan", lambda scan_id: None)
-    monkeypatch.setattr(scans_module, "enforce_scan_creation_rate_limit", lambda user_id: None)
+    monkeypatch.setattr(scans_module, "request_scan_runner", lambda db, scan: None)
+    monkeypatch.setattr(scans_module, "enforce_scan_creation_rate_limit", lambda db, user_id: None)
     return TestClient(fastapi_app)
 
 
@@ -108,6 +109,39 @@ def test_create_scan_rejects_invalid_max_pages(client, user):
         json={"target_input": "example.com", "max_pages": 17, "authorization_acknowledgment": True},
     )
     assert resp.status_code == 422
+
+
+def test_create_scan_fly_machine_creation_failure_marks_scan_failed(client, user, monkeypatch, db):
+    """If the Fly Machines API call fails, the scan must not be left
+    `queued` looking like it's running — it's marked `failed` with a clear
+    event, and the API returns a clean error rather than a fake success.
+    """
+    import app.api.v1.scans as scans_module
+    from app.models.scan import SCAN_STATUS_FAILED, ScanEvent, ScanRequest
+    from app.services.fly_machines import FlyMachinesError
+
+    def _failing_request_scan_runner(db, scan):
+        scan.status = SCAN_STATUS_FAILED
+        scan.failure_summary = "Failed to start scan runner: simulated Fly API outage"
+        db.add(ScanEvent(scan_request_id=scan.id, event_type="runner_creation_failed", message=scan.failure_summary))
+        db.commit()
+        raise FlyMachinesError("simulated Fly API outage")
+
+    monkeypatch.setattr(scans_module, "request_scan_runner", _failing_request_scan_runner)
+
+    _resolve_to_public_ip(monkeypatch)
+    _login(client, user.email)
+    resp = client.post(
+        "/api/v1/scans",
+        json={"target_input": "example.com", "max_pages": 10, "authorization_acknowledgment": True},
+    )
+
+    assert resp.status_code == 502
+    scan = db.query(ScanRequest).filter_by(user_id=user.id).one()
+    assert scan.status == SCAN_STATUS_FAILED
+    assert "simulated Fly API outage" in scan.failure_summary
+    events = [e.event_type for e in db.query(ScanEvent).filter_by(scan_request_id=scan.id).all()]
+    assert "runner_creation_failed" in events
 
 
 # --- ownership / authorization ------------------------------------------------------

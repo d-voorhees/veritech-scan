@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-# When run with cwd=apps/api (e.g. `python -m pytest` from that directory,
-# as systemd/deploy.sh do), `app` is already on sys.path via cwd
-# auto-prepending. When run from the repo root (e.g. `make test` /
+# When run with cwd=apps/api (e.g. `python -m pytest` from that directory),
+# `app` is already on sys.path via cwd auto-prepending. When run from the
+# repo root (e.g. `make test` /
 # `pytest` at the top level), `app` isn't importable yet, so fall back to
 # locating apps/api relative to this file.
 try:
@@ -21,7 +21,6 @@ os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault(
     "DATABASE_URL", f"postgresql+psycopg://{os.environ.get('USER', 'postgres')}@localhost:5432/veritech_scan_test"
 )
-os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ.setdefault("JWT_SECRET", "test-secret-do-not-use-in-production")
 os.environ.setdefault("INITIAL_ADMIN_EMAIL", "admin@example.com")
 os.environ.setdefault("INITIAL_ADMIN_PASSWORD", "test-password-123")

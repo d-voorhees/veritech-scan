@@ -8,18 +8,26 @@ from app.models.base import Base, TimestampMixin, UUIDMixin
 
 # Scan lifecycle statuses.
 SCAN_STATUS_QUEUED = "queued"
+SCAN_STATUS_STARTING = "starting"
 SCAN_STATUS_RUNNING = "running"
 SCAN_STATUS_COMPLETED = "completed"
 SCAN_STATUS_COMPLETED_WITH_WARNINGS = "completed_with_warnings"
 SCAN_STATUS_FAILED = "failed"
+SCAN_STATUS_CANCELLED = "cancelled"
 
 SCAN_STATUSES = (
     SCAN_STATUS_QUEUED,
+    SCAN_STATUS_STARTING,
     SCAN_STATUS_RUNNING,
     SCAN_STATUS_COMPLETED,
     SCAN_STATUS_COMPLETED_WITH_WARNINGS,
     SCAN_STATUS_FAILED,
+    SCAN_STATUS_CANCELLED,
 )
+
+# Statuses a scan-runner is still allowed to claim (i.e. no runner has
+# successfully started processing it yet).
+CLAIMABLE_SCAN_STATUSES = (SCAN_STATUS_QUEUED, SCAN_STATUS_STARTING)
 
 JOB_STATUS_PENDING = "pending"
 JOB_STATUS_RUNNING = "running"
@@ -46,6 +54,16 @@ class ScanRequest(Base, UUIDMixin, TimestampMixin):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     failure_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # On-demand Fly Machine tracking (see app/services/fly_machines.py and
+    # app/runner/). runner_machine_id is the Fly Machine ID created to run
+    # this one scan; heartbeat_at is updated by the runner between stages so
+    # a crashed/killed runner is detectable without an explicit event;
+    # retry_count counts how many times a runner Machine has been requested
+    # for this scan.
+    runner_machine_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     is_demo: Mapped[bool] = mapped_column(default=False, nullable=False)
 

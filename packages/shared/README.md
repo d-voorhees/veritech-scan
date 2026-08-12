@@ -10,18 +10,19 @@ evidence categories, and the exact authorization acknowledgment text.
 ## Current consumption
 
 `apps/web` builds and runs standalone (`npm ci && npm run build` inside
-`apps/web/`, per `scripts/deploy.sh`) and does not currently import this
-package through an npm workspace symlink, to keep that build self-contained
-and already-validated. The handful of values it needs (the authorization
-text, max-page options) are duplicated locally in `apps/web/src/lib` and
-`apps/web/src/app/scans/new/page.tsx` with comments pointing back here.
+`apps/web/`, per the `web-builder` stage in the root `Dockerfile`) and does
+not currently import this package through an npm workspace symlink, to keep
+that build self-contained and already-validated. The handful of values it
+needs (the authorization text, max-page options) are duplicated locally in
+`apps/web/src/lib` and `apps/web/src/app/scans/new/page.tsx` with comments
+pointing back here.
 
 ## Intended follow-up
 
 Wire this package into `apps/web` properly via npm workspaces:
 
 1. Add a root `package.json` with `"workspaces": ["apps/web", "packages/shared"]`.
-2. Update `scripts/deploy.sh`'s Node install/build steps to run `npm ci` /
+2. Update the `Dockerfile`'s `web-builder` stage to run `npm ci` /
    `npm run build` from the repo root instead of `apps/web`, so the
    workspace symlink resolves.
 3. Replace the duplicated constants in `apps/web` with

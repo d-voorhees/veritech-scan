@@ -1,8 +1,9 @@
 // Typed client for the Veritech Scan API. All requests use relative paths
 // (/api/v1/...) so the browser never needs to know the API's real origin —
-// Caddy proxies /api/* to the API container in production, and Next.js
-// rewrites do the same against API_INTERNAL_URL in local development. This
-// keeps CORS out of the picture entirely.
+// in production, Next.js rewrites /api/* to the API process running
+// alongside it in the same Fly Machine (see next.config.mjs and
+// scripts/entrypoint.sh); in local dev, Next.js rewrites do the same
+// against API_INTERNAL_URL. This keeps CORS out of the picture entirely.
 
 const API_BASE = "/api/v1";
 
@@ -49,7 +50,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 // --- types (mirrors apps/api/app/schemas) -------------------------------------------
 
-export type ScanStatus = "queued" | "running" | "completed" | "completed_with_warnings" | "failed";
+export type ScanStatus =
+  | "queued"
+  | "starting"
+  | "running"
+  | "completed"
+  | "completed_with_warnings"
+  | "failed"
+  | "cancelled";
 
 export interface Me {
   id: string;

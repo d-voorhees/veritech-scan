@@ -1,34 +1,33 @@
 import uuid
-from functools import lru_cache
+from datetime import datetime, timedelta, timezone
 
-import redis
+from sqlalchemy.orm import Session
 
 from app.config import get_settings
-
-
-@lru_cache
-def get_redis_client() -> redis.Redis:
-    return redis.Redis.from_url(get_settings().redis_url, decode_responses=True)
+from app.models.scan import ScanRequest
 
 
 class RateLimitExceeded(Exception):
     pass
 
 
-def enforce_scan_creation_rate_limit(user_id: uuid.UUID) -> None:
-    """Sliding-hour counter per user. Keeps scan creation invite-only-scale
-    and prevents the app from being used as a bulk scanning tool.
+def enforce_scan_creation_rate_limit(db: Session, user_id: uuid.UUID) -> None:
+    """Rolling-hour count of scans this user has created, backed by
+    Postgres (no Redis in this architecture). Keeps scan creation
+    invite-only-scale and prevents the app from being used as a bulk
+    scanning tool.
     """
     settings = get_settings()
     limit = settings.scan_create_rate_limit_per_hour
-    key = f"rate_limit:scan_create:{user_id}"
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
 
-    client = get_redis_client()
-    current = client.incr(key)
-    if current == 1:
-        client.expire(key, 3600)
+    count = (
+        db.query(ScanRequest)
+        .filter(ScanRequest.user_id == user_id, ScanRequest.created_at >= cutoff)
+        .count()
+    )
 
-    if current > limit:
+    if count >= limit:
         raise RateLimitExceeded(
             f"Scan creation limit reached ({limit} per hour). Please try again later."
         )

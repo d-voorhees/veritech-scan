@@ -1,11 +1,11 @@
-"""Worker health verification: Redis connectivity, queue/actor registration,
-and Chromium launch + a basic render fixture.
+"""Scan-runner environment verification: confirms Chromium/Playwright can
+actually launch and render on this host.
 
-`--startup-only` runs just the Chromium check with no external services
-required — used by scripts/install-server.sh and scripts/deploy.sh so a
-host that cannot launch Chromium fails loudly at install/deploy time rather
-than at first scan. `scripts/healthcheck.sh` runs the full set (Redis,
-queue, Chromium) against a live stack.
+`--startup-only` (the only mode now — there's no broker/queue to check
+anymore, since scan-runners are one-off Fly Machines, not a persistent
+worker) is run at Docker image build time and by `make fly-scan-runner-test`
+so a host that cannot launch Chromium fails loudly before it ever gets a
+real scan.
 """
 
 import argparse
@@ -29,42 +29,14 @@ def check_chromium_launch() -> bool:
         return False
 
 
-def check_redis() -> bool:
-    from app.core.rate_limit import get_redis_client
-
-    try:
-        get_redis_client().ping()
-        print("[worker-check] Redis connectivity OK.")
-        return True
-    except Exception as exc:  # noqa: BLE001
-        print(f"[worker-check] Redis connectivity FAILED: {exc}", file=sys.stderr)
-        return False
-
-
-def check_queue() -> bool:
-    try:
-        import app.tasks.broker  # noqa: F401
-        from app.tasks.scan_tasks import run_scan
-
-        print(f"[worker-check] Dramatiq actor {run_scan.actor_name!r} registered on queue {run_scan.queue_name!r}.")
-        return True
-    except Exception as exc:  # noqa: BLE001
-        print(f"[worker-check] Queue/actor registration check FAILED: {exc}", file=sys.stderr)
-        return False
-
-
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Veritech Scan worker verification")
+    parser = argparse.ArgumentParser(description="Veritech Scan scan-runner environment verification")
     parser.add_argument(
         "--startup-only", action="store_true", help="Only check Chromium launch (used during image build)"
     )
     args = parser.parse_args()
-
-    if args.startup_only:
-        sys.exit(0 if check_chromium_launch() else 1)
-
-    results = [check_redis(), check_queue(), check_chromium_launch()]
-    sys.exit(0 if all(results) else 1)
+    _ = args
+    sys.exit(0 if check_chromium_launch() else 1)
 
 
 if __name__ == "__main__":

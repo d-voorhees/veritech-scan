@@ -7,7 +7,7 @@ from app.models.scan import (
     SCAN_STATUS_COMPLETED_WITH_WARNINGS,
     SCAN_STATUS_FAILED,
 )
-from app.tasks.scan_tasks import determine_scan_status
+from app.runner.run import determine_scan_status
 
 
 def job(task_name, status):

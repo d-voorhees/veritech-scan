@@ -1,5 +1,5 @@
-// Lightweight readiness check for the web process itself (systemd/curl).
-// Distinct from /health, which Caddy routes to the API service.
+// Lightweight readiness check for the Next.js process itself. Distinct from
+// /health, which next.config.mjs rewrites to the API process.
 export async function GET() {
   return Response.json({ status: "ok" });
 }

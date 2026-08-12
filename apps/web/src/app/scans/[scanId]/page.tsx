@@ -14,7 +14,7 @@ import { api, exportHtmlUrl } from "@/lib/api";
 import { useRequireAuth } from "@/lib/use-auth";
 import { cn, formatDateTime, titleCase } from "@/lib/utils";
 
-const ACTIVE_STATUSES = new Set(["queued", "running"]);
+const ACTIVE_STATUSES = new Set(["queued", "starting", "running"]);
 
 export default function ScanDetailPage({ params }: { params: Promise<{ scanId: string }> }) {
   const { scanId } = use(params);
