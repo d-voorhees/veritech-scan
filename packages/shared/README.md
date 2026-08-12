@@ -9,21 +9,21 @@ evidence categories, and the exact authorization acknowledgment text.
 
 ## Current consumption
 
-`apps/web` is built as a standalone Docker image (context: `apps/web/`) and
-does not currently import this package through an npm workspace symlink, to
-keep its Docker build self-contained and already-validated. The handful of
-values it needs (the authorization text, max-page options) are duplicated
-locally in `apps/web/src/lib` and `apps/web/src/app/scans/new/page.tsx` with
-comments pointing back here.
+`apps/web` builds and runs standalone (`npm ci && npm run build` inside
+`apps/web/`, per `scripts/deploy.sh`) and does not currently import this
+package through an npm workspace symlink, to keep that build self-contained
+and already-validated. The handful of values it needs (the authorization
+text, max-page options) are duplicated locally in `apps/web/src/lib` and
+`apps/web/src/app/scans/new/page.tsx` with comments pointing back here.
 
 ## Intended follow-up
 
 Wire this package into `apps/web` properly via npm workspaces:
 
 1. Add a root `package.json` with `"workspaces": ["apps/web", "packages/shared"]`.
-2. Change `apps/web/Dockerfile`'s build context from `apps/web` to the repo
-   root (see `apps/worker/Dockerfile` for the same pattern already in use),
-   and run `npm ci` from the root.
+2. Update `scripts/deploy.sh`'s Node install/build steps to run `npm ci` /
+   `npm run build` from the repo root instead of `apps/web`, so the
+   workspace symlink resolves.
 3. Replace the duplicated constants in `apps/web` with
    `import { AUTHORIZATION_ACKNOWLEDGMENT_TEXT } from "@veritech-scan/shared"`.
 

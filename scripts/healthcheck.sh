@@ -1,19 +1,36 @@
 #!/usr/bin/env bash
-# Verifies Caddy, web, API, Postgres, Redis, and worker health.
+# Verifies Caddy, API, web app, worker, Postgres, Redis, and Chromium
+# health for the native (non-Docker) deployment.
 #
 # Usage:
-#   ./scripts/healthcheck.sh            # local dev stack (docker-compose.yml)
-#   ./scripts/healthcheck.sh prod        # production stack (docker-compose.prod.yml)
+#   ./scripts/healthcheck.sh            # local dev (processes run directly, no systemd)
+#   ./scripts/healthcheck.sh prod        # production (systemd units + Caddy)
 set -euo pipefail
+
+# Exports KEY=VALUE lines from a .env-style file without shell-interpreting
+# values (plain `source` breaks on unquoted values containing spaces, e.g.
+# PRODUCT_NAME=Veritech Scan).
+load_env_file() {
+  local file="$1"
+  [ -f "$file" ] || return 0
+  while IFS='=' read -r key value; do
+    case "$key" in ''|'#'*) continue ;; esac
+    export "$key=$value"
+  done < "$file"
+}
 
 MODE="${1:-dev}"
 cd "$(dirname "$0")/.."
 
-if [ "$MODE" = "prod" ]; then
-  COMPOSE=(docker compose -f docker-compose.prod.yml --env-file .env.production)
-else
-  COMPOSE=(docker compose)
-fi
+ENV_FILE=".env"
+[ "$MODE" = "prod" ] && ENV_FILE=".env.production"
+load_env_file "$ENV_FILE"
+
+POSTGRES_USER="${POSTGRES_USER:-veritech_scan}"
+POSTGRES_DB="${POSTGRES_DB:-veritech_scan}"
+APP_DOMAIN="${APP_DOMAIN:-localhost}"
+VENV="${VENV:-/opt/veritech-scan/venv}"
+[ "$MODE" != "prod" ] && VENV="${VENV_DEV:-apps/api/.venv}"
 
 pass=0
 fail=0
@@ -30,37 +47,38 @@ check() {
   fi
 }
 
-echo "== Container status =="
-"${COMPOSE[@]}" ps
-
+echo "== Native service health ($MODE) =="
 echo ""
-echo "== Service health =="
-
-check "postgres accepting connections" \
-  "${COMPOSE[@]}" exec -T postgres pg_isready -U "${POSTGRES_USER:-veritech_scan}"
-
-check "redis responding to PING" \
-  "${COMPOSE[@]}" exec -T redis redis-cli ping
-
-check "api /health" bash -c '
-  "$@" exec -T api python -c "
-import urllib.request
-import sys
-sys.exit(0 if urllib.request.urlopen(\"http://localhost:8000/health\", timeout=5).status == 200 else 1)
-"
-' _ "${COMPOSE[@]}"
-
-check "worker process running" \
-  "${COMPOSE[@]}" exec -T worker python -c "import app.tasks.scan_tasks"
 
 if [ "$MODE" = "prod" ]; then
-  check "caddy admin API" \
-    "${COMPOSE[@]}" exec -T caddy wget -qO- http://localhost:2019/config/
-  check "web /healthz via caddy" \
-    curl -fsS "https://${APP_DOMAIN}/health"
+  check "systemd: veritech-scan-api active" systemctl is-active --quiet veritech-scan-api
+  check "systemd: veritech-scan-worker active" systemctl is-active --quiet veritech-scan-worker
+  check "systemd: veritech-scan-web active" systemctl is-active --quiet veritech-scan-web
+  check "systemd: caddy active" systemctl is-active --quiet caddy
+fi
+
+check "postgres accepting connections" \
+  pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+
+check "redis responding to PING" \
+  bash -c "redis-cli -h 127.0.0.1 ping | grep -q PONG"
+
+check "api /health" \
+  curl -fsS http://127.0.0.1:8000/health
+
+check "web responding" \
+  curl -fsS http://127.0.0.1:3000
+
+if [ -x "$VENV/bin/python" ]; then
+  check "worker: queue/actor registration + Chromium launch" \
+    bash -c "cd apps/api && PYTHONPATH=. '$VENV/bin/python' -m app.worker_check"
 else
-  check "web /healthz" \
-    "${COMPOSE[@]}" exec -T web wget -qO- http://localhost:3000/healthz
+  echo "  [SKIP] worker check ($VENV/bin/python not found — pass VENV=/path/to/venv)"
+fi
+
+if [ "$MODE" = "prod" ]; then
+  check "caddy: https://$APP_DOMAIN/health via TLS" \
+    curl -fsS "https://${APP_DOMAIN}/health"
 fi
 
 echo ""

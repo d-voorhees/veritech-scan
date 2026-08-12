@@ -31,8 +31,9 @@ It answers one practical question for a prospective buyer:
 - A full report UI: status, task panel, risk register, expandable evidence,
   DNS/HTTP/crawl/technology/performance sections, known limitations, and a
   clean HTML export meant for "Print → Save as PDF."
-- Runs entirely on one Docker Compose host (Postgres, Redis, Dramatiq
-  worker, FastAPI, Next.js, Caddy) — no managed cloud services required.
+- Runs entirely on one native Ubuntu VM (Postgres, Redis, Dramatiq worker,
+  FastAPI, Next.js, Caddy, all as systemd services) — no Docker, no
+  containers, no managed cloud services required.
 
 ## Explicit non-goals
 
@@ -53,33 +54,43 @@ See `docs/threat-model.md` for the full list of technical non-goals (full
 ```
 apps/web/       Next.js App Router frontend (TypeScript, Tailwind)
 apps/api/       FastAPI + SQLAlchemy + Alembic + the collectors/rules engine
-apps/worker/    Dramatiq worker image (same codebase as apps/api)
+apps/worker/    Dramatiq worker (same codebase as apps/api, run via app.tasks.scan_tasks)
 packages/shared/  Cross-cutting TypeScript constants/types
 docs/           Architecture, rules engine, threat model, deployment, ops
-scripts/        Server bootstrap, deploy, backup/restore scripts
+scripts/        Native server install, deploy, backup/restore, healthcheck scripts
+deploy/systemd/ systemd unit files for the api/worker/web services
+deploy/caddy/   Native Caddy reverse-proxy config
 tests/backend/  pytest suite (89 tests at last count)
-docker-compose.yml        Local development stack
-docker-compose.prod.yml   Oracle Cloud production stack
-Caddyfile                 Reverse proxy: TLS, routing, security headers
 ```
 
 ## Local setup
 
-Prerequisites: Docker + Docker Compose plugin. (Node.js 22 and Python 3.12
-are only needed if you want to run frontend/backend tooling outside Docker.)
+Prerequisites: **PostgreSQL 16+ and Redis 7+ running locally**, Python 3.12
+(3.11 also works), and Node.js 22. No Docker is used anywhere in this
+project, in development or production.
+
+Install Postgres/Redis with your platform's package manager (e.g.
+`brew install postgresql@16 redis` on macOS, `sudo apt install postgresql
+redis-server` on Ubuntu), then create the database and role:
+
+```bash
+createdb veritech_scan
+createuser veritech_scan --pwprompt   # set password to match .env
+```
 
 ```bash
 cp .env.example .env
-# edit .env if you want non-default secrets/ports; defaults work for local dev
+# edit .env — DATABASE_URL/REDIS_URL default to 127.0.0.1; set POSTGRES_PASSWORD
+# to match the role you just created.
 
-make dev          # docker compose up --build — starts postgres, redis, api, worker, web
-```
+cd apps/api && python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt && playwright install chromium
+cd ../web && npm install
+cd ../..
 
-Once the stack is up:
-
-```bash
 make migrate       # alembic upgrade head
 make seed          # creates the dev admin user + a synthetic demo scan
+make dev           # starts uvicorn --reload, the dramatiq worker, and next dev together
 ```
 
 Open http://localhost:3000 and sign in with `INITIAL_ADMIN_EMAIL` /
@@ -87,20 +98,14 @@ Open http://localhost:3000 and sign in with `INITIAL_ADMIN_EMAIL` /
 `admin@example.com` / `change-me` — **change these** even for local dev if
 your machine is at all shared).
 
-Other useful commands:
+`make dev` runs all three processes in the foreground (Ctrl+C stops all of
+them). To run them separately instead (e.g. in different terminals):
 
 ```bash
-make dev-down      # stop the local stack
-make logs          # tail all service logs
-make build         # build all images (dev + prod compose files)
+cd apps/api && PYTHONPATH=. .venv/bin/uvicorn app.main:app --reload --port 8000
+cd apps/api && PYTHONPATH=. .venv/bin/dramatiq app.tasks.scan_tasks --processes 1 --threads 1
+cd apps/web && npm run dev
 ```
-
-## Docker development commands
-
-See the [Makefile](./Makefile) for the full list. The dev compose file
-(`docker-compose.yml`) mounts `apps/api` and `apps/web` as live volumes with
-hot reload (`uvicorn --reload`, `next dev`); the prod compose file
-(`docker-compose.prod.yml`) builds immutable images and adds Caddy in front.
 
 ## Environment configuration
 
@@ -115,19 +120,20 @@ providers (`GOOGLE_PAGESPEED_API_KEY`, `SENTRY_DSN`). Never commit `.env` or
 ## Migrations
 
 ```bash
-make migrate                 # alembic upgrade head, inside the api container
+make migrate                 # alembic upgrade head, using apps/api/.venv
 ```
 
-Migrations are **never** run automatically at container startup (see
-`apps/api/Dockerfile` — there's no migration step in the API's `CMD`) — this
-is a deliberate choice so a deploy never silently applies schema changes
-without an operator seeing it happen. Always run `make migrate` (or
-`./scripts/deploy.sh`, which runs it explicitly) after pulling new code.
+Migrations are **never** run automatically at service startup (see
+`deploy/systemd/veritech-scan-api.service` — there's no migration step in
+its `ExecStart`) — this is a deliberate choice so a deploy never silently
+applies schema changes without an operator seeing it happen. Always run
+`make migrate` (or `./scripts/deploy.sh`, which runs it explicitly) after
+pulling new code.
 
 To generate a new migration after changing SQLAlchemy models:
 
 ```bash
-docker compose run --rm api alembic revision --autogenerate -m "describe the change"
+cd apps/api && .venv/bin/alembic revision --autogenerate -m "describe the change"
 ```
 
 Review the generated file before committing — autogenerate is a starting
@@ -136,8 +142,8 @@ point, not a guarantee.
 ## Seed data
 
 ```bash
-make seed              # admin user + fictional org + fully synthetic demo scan
-make seed -- --admin-only  # (or: docker compose run --rm api python -m app.seed --admin-only)
+make seed                    # admin user + fictional org + fully synthetic demo scan
+make seed ARGS=--admin-only  # (or: cd apps/api && .venv/bin/python -m app.seed --admin-only)
 ```
 
 The synthetic demo scan is clearly labeled everywhere it appears (`is_demo`
@@ -164,14 +170,16 @@ collector → evidence → rules-engine pipeline with no real network or DNS
 calls (`respx` for HTTP, a fake DNS resolver, real Playwright with route
 interception for the browser step).
 
-Outside Docker, the suite also runs directly against a local Postgres:
+`make test` runs `apps/api/.venv/bin/python -m pytest` from the repo root
+(picking up `pytest.ini`'s `testpaths = tests/backend`) against whatever
+`DATABASE_URL`/`REDIS_URL` are set in your environment/`.env`, then
+`npm run test --if-present` in `apps/web`. To point it at a dedicated test
+database instead of your dev one:
 
 ```bash
-cd apps/api && python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements-dev.txt && playwright install chromium
 createdb veritech_scan_test
-cd ../.. && PYTHONPATH=apps/api DATABASE_URL=postgresql+psycopg://$(whoami)@localhost:5432/veritech_scan_test \
-  python3 -m pytest tests/backend -q
+PYTHONPATH=apps/api DATABASE_URL=postgresql+psycopg://$(whoami)@localhost:5432/veritech_scan_test \
+  apps/api/.venv/bin/python -m pytest tests/backend -q
 ```
 
 ## Running an authorized scan
@@ -220,25 +228,26 @@ Summarized here; full detail in `docs/threat-model.md`:
 
 ## Production deployment summary
 
-Full step-by-step in `docs/oracle-deployment.md`. Short version:
+Full step-by-step in `docs/oracle-native-deployment.md`. Short version:
 
 ```bash
 # on a fresh Ubuntu 24.04 ARM64 Oracle Cloud VM:
-sudo ./scripts/bootstrap-server.sh          # Docker, deploy user, UFW
-# clone the repo, then:
+sudo ./scripts/install-server.sh            # Caddy, Postgres, Redis, Python, Node, deploy user, UFW
+# clone the repo into /opt/veritech-scan/app, then:
 cp .env.example .env.production             # fill in production secrets
-make prod-up                                 # build + start caddy/web/api/worker/postgres/redis
-docker compose -f docker-compose.prod.yml --env-file .env.production run --rm api alembic upgrade head
-docker compose -f docker-compose.prod.yml --env-file .env.production run --rm api python -m app.seed --admin-only
+make deploy                                 # venv/deps, npm build, migrate, restart systemd services
+make seed ARGS=--admin-only VENV=/opt/veritech-scan/venv
 # point app.veritechdiligence.com's A record at the VM's public IP
-./scripts/healthcheck.sh prod
+make healthcheck MODE=prod
 ```
 
-Only Caddy publishes ports (80/443); Postgres, Redis, and the worker are
-never exposed to the host or the public internet. Subsequent deploys use
-`./scripts/deploy.sh`, which pulls, builds, migrates, restarts, and
-verifies health in one step, printing logs and instructions to roll back if
-anything fails.
+Every service — Caddy, PostgreSQL, Redis, the API, the worker, and Next.js
+— runs as a native systemd unit. Only Caddy publishes ports (80/443);
+Postgres and Redis are bound to `127.0.0.1` and the worker exposes no port
+at all — none are ever exposed to the public internet. Subsequent deploys
+use `./scripts/deploy.sh` (`make deploy`), which pulls, installs
+dependencies, builds, migrates, restarts services, and verifies health in
+one step, printing logs and instructions to roll back if anything fails.
 
 ## Documentation index
 
@@ -248,8 +257,8 @@ anything fails.
   versioning, the full rule catalog, how to add a rule safely.
 - [`docs/threat-model.md`](docs/threat-model.md) — SSRF prevention, crawl
   boundaries, authorization, isolation, rate limiting, explicit non-goals.
-- [`docs/oracle-deployment.md`](docs/oracle-deployment.md) — exact Oracle
-  Cloud ARM64 VM deployment steps.
+- [`docs/oracle-native-deployment.md`](docs/oracle-native-deployment.md) —
+  exact Oracle Cloud ARM64 VM native (systemd) deployment steps.
 - [`docs/operations.md`](docs/operations.md) — logs, restarts, queue
   inspection, secret rotation, free-tier constraints.
 - [`docs/backup-and-recovery.md`](docs/backup-and-recovery.md) — backup,

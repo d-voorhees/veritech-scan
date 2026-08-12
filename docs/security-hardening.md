@@ -8,19 +8,20 @@ already in place, and what to add before scaling past an MVP.
 
 - **TLS everywhere in production.** Caddy automatically issues and renews
   Let's Encrypt certificates and terminates TLS; only Caddy has public
-  ports (80/443). See `Caddyfile`.
+  ports (80/443). See `deploy/caddy/Caddyfile`.
 - **Security headers** on every response via Caddy:
   `Strict-Transport-Security`, `X-Content-Type-Options: nosniff`,
   `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and the
   `Server` header is stripped.
 - **Conservative request body limit** (5MB) at the proxy layer — this app
   never accepts file uploads.
-- **Non-root containers.** `api`, `worker`, and `web` all run as a
-  dedicated unprivileged user (`appuser` / `appgroup`), not root — see each
-  `Dockerfile`.
-- **No unnecessary public surface.** `postgres`, `redis`, and `worker` are
-  never published to the host in `docker-compose.prod.yml`; only `caddy`
-  binds 80/443.
+- **Non-root services.** `veritech-scan-api`, `veritech-scan-worker`, and
+  `veritech-scan-web` all run as a dedicated unprivileged system user
+  (`veritech`), never root — see `deploy/systemd/*.service` (`User=`/
+  `Group=`, plus `NoNewPrivileges=true` and `ProtectSystem=strict`).
+- **No unnecessary public surface.** PostgreSQL and Redis are bound to
+  `127.0.0.1` at the daemon level (not just left off a firewall rule) and
+  the worker listens on no port at all; only Caddy binds 80/443.
 - **Password hashing** via `bcrypt` (`app/security/passwords.py`), never
   plaintext or reversible encryption.
 - **JWT sessions** delivered as `httponly`, `samesite=lax` cookies
@@ -30,13 +31,17 @@ already in place, and what to add before scaling past an MVP.
   `docs/threat-model.md`'s "User / data isolation" section.
 - **Rate limiting on scan creation** to prevent the app being used as a
   bulk/anonymous scanning tool.
-- **UFW configured to allow only SSH, HTTP, HTTPS** by `bootstrap-server.sh`.
+- **UFW configured to allow only SSH, HTTP, HTTPS** by `scripts/install-server.sh`.
+- **Scoped sudo for the deploy user.** The deploy user's sudoers grant
+  (installed by `scripts/install-server.sh`) is limited to
+  `systemctl restart/stop/start/status` on this app's three units plus
+  `caddy reload`/`validate` — not general root access.
 - **Secrets never committed**: `.env`, `.env.production`, database dumps,
   screenshots, and report exports are all in `.gitignore`.
 
 ## Recommended before handling real client engagement data
 
-1. **SSH hardening** — `bootstrap-server.sh` deliberately does not do this
+1. **SSH hardening** — `scripts/install-server.sh` deliberately does not do this
    automatically (see that script's comments). After confirming key-based
    login works:
    - `PasswordAuthentication no` and `PermitRootLogin no` in

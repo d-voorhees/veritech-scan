@@ -5,11 +5,11 @@ from pathlib import Path
 
 import pytest
 
-# In Docker, tests run against the `app` package already on sys.path (the
-# api/worker containers' WORKDIR *is* apps/api, invoked via `python -m
-# pytest` so cwd is prepended automatically). Outside Docker — running
-# straight from a host checkout — `app` isn't importable yet, so fall back
-# to locating apps/api relative to this file.
+# When run with cwd=apps/api (e.g. `python -m pytest` from that directory,
+# as systemd/deploy.sh do), `app` is already on sys.path via cwd
+# auto-prepending. When run from the repo root (e.g. `make test` /
+# `pytest` at the top level), `app` isn't importable yet, so fall back to
+# locating apps/api relative to this file.
 try:
     import app  # noqa: F401
 except ImportError:

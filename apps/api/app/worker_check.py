@@ -2,9 +2,10 @@
 and Chromium launch + a basic render fixture.
 
 `--startup-only` runs just the Chromium check with no external services
-required — used as a Docker build-time `RUN` step so an ARM64 image that
-cannot launch Chromium fails the build immediately rather than at first scan.
-`make worker-check` runs the full set against a live stack.
+required — used by scripts/install-server.sh and scripts/deploy.sh so a
+host that cannot launch Chromium fails loudly at install/deploy time rather
+than at first scan. `scripts/healthcheck.sh` runs the full set (Redis,
+queue, Chromium) against a live stack.
 """
 
 import argparse

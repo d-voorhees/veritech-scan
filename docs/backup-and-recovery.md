@@ -4,13 +4,13 @@
 
 `scripts/backup-postgres.sh` backs up the **Postgres database only** — every
 table under `docs/architecture.md`'s data model (users, scans, evidence,
-findings, reports, etc). It does **not** back up the `scan_artifacts` volume
-(screenshots, generated HTML report exports) — those are regenerable
-(re-exporting a report re-renders it from the database) with the exception
-of Playwright screenshots, which are not currently reproducible after the
-fact once a scan's evidence has been superseded. Treat screenshot loss as
-acceptable for the MVP; if that changes, extend the backup script to also
-`tar` the `scan_artifacts` volume.
+findings, reports, etc). It does **not** back up
+`/opt/veritech-scan/artifacts` (screenshots, generated HTML report exports)
+— those are regenerable (re-exporting a report re-renders it from the
+database) with the exception of Playwright screenshots, which are not
+currently reproducible after the fact once a scan's evidence has been
+superseded. Treat screenshot loss as acceptable for the MVP; if that
+changes, extend the backup script to also `tar` the artifacts directory.
 
 ## Creating a backup
 
@@ -20,15 +20,16 @@ make backup-db
 ./scripts/backup-postgres.sh
 ```
 
-This runs `pg_dump` **inside the postgres container** (so it always matches
-the exact server version and never needs Postgres client tools on the host),
-compresses the output, and writes a timestamped file to
-`/opt/veritech-scan/backups/veritech-scan-<timestamp>.sql.gz`. The 14 most
-recent backups are retained by default; older ones are pruned automatically
-(`--retain N` to change this). The script fails loudly (non-zero exit,
-partial file removed) if `pg_dump` errors or produces an empty file, and it
-never prints database credentials — `pg_dump` authenticates via the
-container's local trust auth, not a password on the command line.
+This runs the native `pg_dump` binary against `127.0.0.1:5432` (installed by
+`scripts/install-server.sh` alongside the Postgres server itself, so the
+version always matches), compresses the output, and writes a timestamped
+file to `/opt/veritech-scan/backups/veritech-scan-<timestamp>.sql.gz` (mode
+`600`). The 14 most recent backups are retained by default; older ones are
+pruned automatically (`--retain N` to change this). The script fails loudly
+(non-zero exit, partial file removed) if `pg_dump` errors or produces an
+empty file. The Postgres password is read from `.env.production` and passed
+via a `PGPASSWORD` environment variable scoped to the single `pg_dump`
+invocation — it is never logged or echoed.
 
 Backups on a fresh install won't exist until you run this at least once —
 there is **no automatic daily cron job configured out of the box**. Set one
@@ -52,16 +53,17 @@ database. The script:
 2. Prints a clear warning and requires you to type the database name to
    confirm (or pass `--yes` for non-interactive use, e.g. in a documented
    disaster-recovery runbook).
-3. Stops `api` and `worker` first (they must not write mid-restore).
-4. Restores via `psql` inside the postgres container, with
+3. Stops `veritech-scan-api` and `veritech-scan-worker` via `systemctl`
+   first (they must not write mid-restore).
+4. Restores via the native `psql` client against `127.0.0.1:5432`, with
    `ON_ERROR_STOP=on` so a partial failure stops immediately rather than
    silently continuing.
-5. Restarts `api` and `worker`.
+5. Restarts `veritech-scan-api` and `veritech-scan-worker`.
 
 Via Make: `make restore-db FILE=/opt/veritech-scan/backups/veritech-scan-<timestamp>.sql.gz ARGS=--yes`
 
 **Expected downtime:** typically under a minute at MVP scale (a few scans'
-worth of data) — dominated by `api`/`worker` container stop/start time, not
+worth of data) — dominated by `api`/`worker` systemd stop/start time, not
 the restore itself.
 
 **Verification after restore:**

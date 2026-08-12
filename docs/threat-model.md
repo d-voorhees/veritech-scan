@@ -109,8 +109,8 @@ enforcement of ownership — see "Non-goals" below.
 
 ## Artifact retention
 
-Screenshots and generated HTML reports are written to the `scan_artifacts`
-Docker volume, scoped per-scan by ID
+Screenshots and generated HTML reports are written to the artifact storage
+directory (`ARTIFACT_STORAGE_LOCAL_PATH`), scoped per-scan by ID
 (`app/services/artifact_storage.py::LocalArtifactStorage`), which also
 guards against path traversal outside the artifact root. Nothing sensitive
 (cookies, form data, credentials) is ever written there — see "Worker

@@ -2,8 +2,9 @@
 
 Veritech Scan is a monorepo with three runtime apps — a Next.js frontend, a
 FastAPI API, and a Dramatiq worker — sharing one PostgreSQL database and one
-Redis instance, all behind a single Caddy reverse proxy. Everything runs on
-one Docker Compose host (an Oracle Cloud Always Free ARM64 VM in production).
+Redis instance, all behind a single Caddy reverse proxy. Everything runs as
+native systemd services on one Oracle Cloud Always Free ARM64 VM in
+production — no Docker or containers anywhere in the stack.
 
 ## System diagram
 
@@ -11,14 +12,14 @@ one Docker Compose host (an Oracle Cloud Always Free ARM64 VM in production).
 flowchart TB
     Browser["Browser"]
 
-    subgraph vm["Single Docker Compose host"]
+    subgraph vm["Single Ubuntu 24.04 ARM64 VM (systemd services)"]
         Caddy["Caddy\n(TLS termination,\nreverse proxy)"]
-        Web["Next.js web\n(App Router)"]
-        Api["FastAPI api"]
-        Worker["Dramatiq worker\n(concurrency = 1)"]
-        Redis["Redis\n(queue + rate limits)"]
-        Postgres["PostgreSQL\n(evidence, findings, reports)"]
-        Artifacts["scan_artifacts volume\n(screenshots, HTML exports)"]
+        Web["Next.js web\n(veritech-scan-web.service)"]
+        Api["FastAPI api\n(veritech-scan-api.service)"]
+        Worker["Dramatiq worker\n(veritech-scan-worker.service,\nconcurrency = 1)"]
+        Redis["Redis\n(queue + rate limits,\nlocalhost only)"]
+        Postgres["PostgreSQL\n(evidence, findings, reports,\nlocalhost only)"]
+        Artifacts["/opt/veritech-scan/artifacts\n(screenshots, HTML exports)"]
     end
 
     Target["Public target website\n(bounded, rate-limited,\nSSRF-checked)"]
@@ -93,9 +94,10 @@ rows — the product's actual core data model (see
 `apps/api/app/models/evidence.py`). An evidence item always has a
 `category`, `source_type`, `confidence`, a `normalized_payload_json`, and a
 `human_readable_summary`. Raw HTTP responses are never stored as the primary
-record; screenshots and generated report HTML go to the `scan_artifacts`
-volume through `ArtifactStorage` (`apps/api/app/services/artifact_storage.py`),
-referenced by path, not embedded in Postgres.
+record; screenshots and generated report HTML go to the artifact storage
+directory (`ARTIFACT_STORAGE_LOCAL_PATH`) through `ArtifactStorage`
+(`apps/api/app/services/artifact_storage.py`), referenced by path, not
+embedded in Postgres.
 
 ## Rules engine flow
 
@@ -113,13 +115,16 @@ a `ReportOut` by re-querying findings + observations for the scan. The same
 `apps/api/app/templates/report.html.jinja` for `GET /scans/{id}/export/html`
 — a self-contained, print-friendly page (a "Print / Save as PDF" button is
 the only script on the page). The orchestrator also generates and saves this
-HTML to the `scan_artifacts` volume and a `reports` row when a scan finishes,
-so the export doesn't have to be regenerated from a stale evidence set.
+HTML to the artifact storage directory and a `reports` row when a scan
+finishes, so the export doesn't have to be regenerated from a stale
+evidence set.
 
 ## Why Postgres/Redis/worker are never publicly exposed
 
-`docker-compose.prod.yml` gives `postgres`, `redis`, and `worker` no
-`ports:` mapping at all (`postgres` and `redis` use `expose:` for
-intra-network visibility only; `worker` has neither). Only `caddy` binds
-host ports 80/443. This is enforced structurally, not by firewall rules
-alone — see `docs/threat-model.md`.
+PostgreSQL and Redis are configured (by `scripts/install-server.sh`) to
+`bind` to `127.0.0.1` only at the daemon level — not merely left off a
+`ports:` list, since there's no container network to rely on for isolation
+anymore. The Dramatiq worker listens on no network port at all; it only
+pulls from Redis. Only Caddy binds host ports 80/443. UFW is configured to
+allow only SSH/HTTP/HTTPS as defense in depth on top of the bind-address
+restriction — see `docs/threat-model.md`.

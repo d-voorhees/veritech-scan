@@ -1,7 +1,7 @@
 """Artifact storage abstraction.
 
-The MVP stores screenshots and HTML report exports on a mounted Docker
-volume (`scan_artifacts`). This interface is the seam that lets a future
+The MVP stores screenshots and HTML report exports on a local filesystem
+path (`ARTIFACT_STORAGE_LOCAL_PATH`). This interface is the seam that lets a future
 S3/R2-compatible backend replace local storage without touching collectors,
 the rules engine, or report generation — callers only ever see
 `ArtifactStorage.save` / `.read` / `.url_for`.
