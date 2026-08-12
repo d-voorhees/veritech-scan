@@ -2,22 +2,257 @@
 
 **Evidence-first technical pre-screening for web-business acquisitions.**
 
-Veritech Scan is a product of [Veritech Diligence](https://veritechdiligence.com). It performs bounded, authorized analysis of a public web property and converts web, DNS, performance, technology, and dependency signals into an evidence-linked technical risk register.
+Veritech Scan is a product of [Veritech Diligence](https://veritechdiligence.com).
+Veritech Diligence provides technical due diligence for buyers of web-based
+businesses. Veritech Scan is a bounded, rate-limited, public-web technical
+evidence system: a user enters a public web domain, confirms they are
+authorized to assess it, and receives a structured, evidence-linked
+**Technical Acquisition Brief** — a prioritized risk register with every
+finding traceable back to the exact evidence that produced it.
 
-It helps buyers answer a practical early-stage acquisition question:
+It answers one practical question for a prospective buyer:
 
-> Is this web business worth deeper technical diligence, and what should be investigated next?
+> Is this web property worth deeper technical diligence, and what should I
+> investigate next?
 
-## What it does
+## MVP scope
 
-- Runs bounded, rate-limited, same-origin website crawls
-- Analyzes HTTP behavior, redirects, robots.txt, sitemaps, metadata, and indexability signals
-- Reviews DNS, SPF, and DMARC posture
-- Captures homepage rendering, third-party requests, and JavaScript errors with Playwright
-- Detects public technology and third-party dependency signals
-- Converts normalized evidence into versioned, confidence-scored technical findings
-- Generates a Technical Acquisition Brief with linked evidence and recommended next actions
+- Invite-only, authenticated app (no public signup).
+- Submit a domain/URL + business notes + crawl depth (10/25/50 pages) +
+  a required authorization acknowledgment.
+- Asynchronous scan pipeline (Dramatiq + Redis) covering: HTTP/redirect
+  checks, robots.txt + sitemap discovery, a bounded same-origin crawl,
+  DNS/SPF/DMARC posture, Playwright homepage rendering + third-party
+  dependency inventory, local rules-based technology detection, and a
+  performance adapter (local metrics always; Google PageSpeed Insights
+  optionally, when configured).
+- A deterministic, versioned rules engine (12 rules) that turns collected
+  evidence into severity- and confidence-scored findings — never an LLM.
+- A full report UI: status, task panel, risk register, expandable evidence,
+  DNS/HTTP/crawl/technology/performance sections, known limitations, and a
+  clean HTML export meant for "Print → Save as PDF."
+- Runs entirely on one Docker Compose host (Postgres, Redis, Dramatiq
+  worker, FastAPI, Next.js, Caddy) — no managed cloud services required.
 
-## What it does not do
+## Explicit non-goals
 
-Veritech Scan is not a vulnerability scanner, penetration-testing tool, proxy service, or replacement for full technical diligence. It does not authenticate to websites, submit forms, bypass access controls, solve CAPTCHAs, or exploit vulnerabilities.
+Veritech Scan is **not**:
+
+- A vulnerability scanner or penetration-testing tool.
+- An access-control bypass, credential-testing, or exploitation system.
+- A scraping proxy for arbitrary/bulk use.
+- A source of confirmed vulnerabilities — findings distinguish
+  *observation* from *interpretation* and a *hardening opportunity* from a
+  *confirmed vulnerability*, and the product never claims the latter.
+
+See `docs/threat-model.md` for the full list of technical non-goals (full
+`robots.txt` enforcement, DKIM discovery, high availability, etc).
+
+## Repository layout
+
+```
+apps/web/       Next.js App Router frontend (TypeScript, Tailwind)
+apps/api/       FastAPI + SQLAlchemy + Alembic + the collectors/rules engine
+apps/worker/    Dramatiq worker image (same codebase as apps/api)
+packages/shared/  Cross-cutting TypeScript constants/types
+docs/           Architecture, rules engine, threat model, deployment, ops
+scripts/        Server bootstrap, deploy, backup/restore scripts
+tests/backend/  pytest suite (89 tests at last count)
+docker-compose.yml        Local development stack
+docker-compose.prod.yml   Oracle Cloud production stack
+Caddyfile                 Reverse proxy: TLS, routing, security headers
+```
+
+## Local setup
+
+Prerequisites: Docker + Docker Compose plugin. (Node.js 22 and Python 3.12
+are only needed if you want to run frontend/backend tooling outside Docker.)
+
+```bash
+cp .env.example .env
+# edit .env if you want non-default secrets/ports; defaults work for local dev
+
+make dev          # docker compose up --build — starts postgres, redis, api, worker, web
+```
+
+Once the stack is up:
+
+```bash
+make migrate       # alembic upgrade head
+make seed          # creates the dev admin user + a synthetic demo scan
+```
+
+Open http://localhost:3000 and sign in with `INITIAL_ADMIN_EMAIL` /
+`INITIAL_ADMIN_PASSWORD` from your `.env` (defaults:
+`admin@example.com` / `change-me` — **change these** even for local dev if
+your machine is at all shared).
+
+Other useful commands:
+
+```bash
+make dev-down      # stop the local stack
+make logs          # tail all service logs
+make build         # build all images (dev + prod compose files)
+```
+
+## Docker development commands
+
+See the [Makefile](./Makefile) for the full list. The dev compose file
+(`docker-compose.yml`) mounts `apps/api` and `apps/web` as live volumes with
+hot reload (`uvicorn --reload`, `next dev`); the prod compose file
+(`docker-compose.prod.yml`) builds immutable images and adds Caddy in front.
+
+## Environment configuration
+
+All configuration is via environment variables — see
+[`.env.example`](./.env.example) for the full list with defaults, including
+product identity (`PRODUCT_NAME`, `PARENT_BRAND`, `APP_DOMAIN`, ...), scan
+safety limits (`SCAN_MAX_PAGES`, `SCAN_DEFAULT_REQUEST_DELAY_SECONDS`,
+`SCAN_MAX_TOTAL_MINUTES`, `SCAN_CREATE_RATE_LIMIT_PER_HOUR`), and optional
+providers (`GOOGLE_PAGESPEED_API_KEY`, `SENTRY_DSN`). Never commit `.env` or
+`.env.production` — both are gitignored.
+
+## Migrations
+
+```bash
+make migrate                 # alembic upgrade head, inside the api container
+```
+
+Migrations are **never** run automatically at container startup (see
+`apps/api/Dockerfile` — there's no migration step in the API's `CMD`) — this
+is a deliberate choice so a deploy never silently applies schema changes
+without an operator seeing it happen. Always run `make migrate` (or
+`./scripts/deploy.sh`, which runs it explicitly) after pulling new code.
+
+To generate a new migration after changing SQLAlchemy models:
+
+```bash
+docker compose run --rm api alembic revision --autogenerate -m "describe the change"
+```
+
+Review the generated file before committing — autogenerate is a starting
+point, not a guarantee.
+
+## Seed data
+
+```bash
+make seed              # admin user + fictional org + fully synthetic demo scan
+make seed -- --admin-only  # (or: docker compose run --rm api python -m app.seed --admin-only)
+```
+
+The synthetic demo scan is clearly labeled everywhere it appears (`is_demo`
+flag on the organization and scan, `[SYNTHETIC DEMO DATA]` in its notes, a
+visible "Synthetic demo data" badge in the UI, and the same disclosure in
+the HTML export) — it exists to let you see a fully populated report
+without running a real scan.
+
+## Testing
+
+```bash
+make test           # backend pytest suite + frontend tests (if present)
+make lint            # ruff + mypy (backend), eslint (frontend)
+```
+
+The backend suite (`tests/backend/`, 89 tests) covers URL normalization,
+SSRF/private-IP/redirect-revalidation protections, crawl URL filtering and
+max-page limits, SPF/DMARC parsing, all 12 rules (firing and non-firing
+cases), finding-to-evidence linkage, the scan creation/retrieval API and
+ownership authorization, partial-completion behavior after a simulated task
+failure, a real Chromium launch + render check, and one fully mocked
+end-to-end happy-path scan (`test_e2e_scan.py`) that exercises the real
+collector → evidence → rules-engine pipeline with no real network or DNS
+calls (`respx` for HTTP, a fake DNS resolver, real Playwright with route
+interception for the browser step).
+
+Outside Docker, the suite also runs directly against a local Postgres:
+
+```bash
+cd apps/api && python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt && playwright install chromium
+createdb veritech_scan_test
+cd ../.. && PYTHONPATH=apps/api DATABASE_URL=postgresql+psycopg://$(whoami)@localhost:5432/veritech_scan_test \
+  python3 -m pytest tests/backend -q
+```
+
+## Running an authorized scan
+
+1. Sign in.
+2. **New scan** → enter a domain/URL you own or are authorized to analyze,
+   optional notes, a crawl depth (10/25/50 pages), and check the
+   authorization acknowledgment (required — the form won't submit without
+   it, and the API rejects the request server-side too).
+3. You're redirected to the scan's status page, which polls automatically
+   while the scan is `queued`/`running` and shows each collection task's
+   status live.
+4. Once `completed` or `completed_with_warnings`, review the risk register,
+   click into any finding to see its exact linked evidence, and use
+   **Export HTML report** for a print-ready Technical Acquisition Brief.
+
+## Safety boundaries
+
+Summarized here; full detail in `docs/threat-model.md`:
+
+- Only `http`/`https`, only public IPs (loopback/private/link-local/
+  multicast/reserved/cloud-metadata all rejected, before *and* after every
+  redirect).
+- Same-origin crawl only, excluding login/admin/cart/checkout/API paths,
+  static assets, and non-http(s) schemes.
+- Hard page-count cap (10/25/50), 1.5s/request delay, 15s/page timeout,
+  10-minute total scan timeout.
+- Never submits forms, authenticates, solves CAPTCHAs, or bypasses access
+  controls.
+- Ephemeral browser context per scan — no cookie/session persistence.
+- Scan creation is rate-limited per user; the app is invite-only.
+
+## Known limitations
+
+- `robots.txt` is recorded as evidence but not enforced against the
+  crawler (documented in the report itself, not just here).
+- DKIM discovery is out of scope for the MVP (SPF + DMARC only).
+- Browser rendering covers the homepage only, not every crawled page.
+- Google PageSpeed Insights metrics only appear when
+  `GOOGLE_PAGESPEED_API_KEY` is configured; otherwise the report says so
+  explicitly rather than silently omitting the section.
+- Single-VM, single-worker deployment: no high availability, no automatic
+  scan requeue if the worker restarts mid-scan (see `docs/operations.md`).
+- Off-server backups are not configured by default — see
+  `docs/backup-and-recovery.md` before storing real client data.
+
+## Production deployment summary
+
+Full step-by-step in `docs/oracle-deployment.md`. Short version:
+
+```bash
+# on a fresh Ubuntu 24.04 ARM64 Oracle Cloud VM:
+sudo ./scripts/bootstrap-server.sh          # Docker, deploy user, UFW
+# clone the repo, then:
+cp .env.example .env.production             # fill in production secrets
+make prod-up                                 # build + start caddy/web/api/worker/postgres/redis
+docker compose -f docker-compose.prod.yml --env-file .env.production run --rm api alembic upgrade head
+docker compose -f docker-compose.prod.yml --env-file .env.production run --rm api python -m app.seed --admin-only
+# point app.veritechdiligence.com's A record at the VM's public IP
+./scripts/healthcheck.sh prod
+```
+
+Only Caddy publishes ports (80/443); Postgres, Redis, and the worker are
+never exposed to the host or the public internet. Subsequent deploys use
+`./scripts/deploy.sh`, which pulls, builds, migrates, restarts, and
+verifies health in one step, printing logs and instructions to roll back if
+anything fails.
+
+## Documentation index
+
+- [`docs/architecture.md`](docs/architecture.md) — system diagram, why a
+  background worker is required, collection/evidence/rules/report flow.
+- [`docs/rules-engine.md`](docs/rules-engine.md) — rule architecture,
+  versioning, the full rule catalog, how to add a rule safely.
+- [`docs/threat-model.md`](docs/threat-model.md) — SSRF prevention, crawl
+  boundaries, authorization, isolation, rate limiting, explicit non-goals.
+- [`docs/oracle-deployment.md`](docs/oracle-deployment.md) — exact Oracle
+  Cloud ARM64 VM deployment steps.
+- [`docs/operations.md`](docs/operations.md) — logs, restarts, queue
+  inspection, secret rotation, free-tier constraints.
+- [`docs/backup-and-recovery.md`](docs/backup-and-recovery.md) — backup,
+  restore, and off-server backup guidance.
+- [`docs/security-hardening.md`](docs/security-hardening.md) — what's
+  already hardened and what to add before handling real client data.

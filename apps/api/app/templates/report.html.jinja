@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ report.report_name }} — {{ report.domain }}</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: #1a1f27;
+    background: #ffffff;
+    margin: 0;
+    padding: 2.5rem 3rem;
+    line-height: 1.5;
+    font-size: 14px;
+  }
+  h1, h2, h3 { font-weight: 600; letter-spacing: -0.01em; }
+  h1 { font-size: 1.5rem; margin: 0 0 0.25rem; }
+  h2 { font-size: 1.05rem; margin: 2rem 0 0.75rem; padding-bottom: 0.4rem; border-bottom: 1px solid #d9dde3; }
+  .eyebrow { color: #5b6472; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.5rem; }
+  .meta-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; margin: 1.25rem 0; }
+  .meta-item { border: 1px solid #d9dde3; border-radius: 6px; padding: 0.6rem 0.75rem; }
+  .meta-item .label { font-size: 0.7rem; text-transform: uppercase; color: #5b6472; letter-spacing: 0.05em; }
+  .meta-item .value { font-size: 0.9rem; margin-top: 0.15rem; word-break: break-word; }
+  .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+  .badge-high { background: #fbe1e1; color: #9c1f1f; }
+  .badge-medium { background: #fbeecb; color: #8a5a00; }
+  .badge-low { background: #e2e9fb; color: #29418a; }
+  .badge-info { background: #e6e9ec; color: #444c56; }
+  .badge-status { background: #eef2f6; color: #33404d; }
+  table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; }
+  th, td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid #e5e8ec; font-size: 0.85rem; vertical-align: top; }
+  th { font-size: 0.72rem; text-transform: uppercase; color: #5b6472; letter-spacing: 0.04em; }
+  .finding { border: 1px solid #d9dde3; border-radius: 8px; padding: 0.9rem 1rem; margin-bottom: 0.75rem; page-break-inside: avoid; }
+  .finding-title-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+  .finding-title { font-weight: 600; font-size: 0.95rem; }
+  .finding-field { margin-top: 0.5rem; }
+  .finding-field .label { font-size: 0.72rem; text-transform: uppercase; color: #5b6472; letter-spacing: 0.04em; }
+  details.evidence { margin-top: 0.6rem; background: #f7f8fa; border-radius: 6px; padding: 0.5rem 0.7rem; }
+  details.evidence summary { cursor: pointer; font-size: 0.8rem; font-weight: 600; color: #33404d; }
+  .evidence-item { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed #d9dde3; font-size: 0.8rem; }
+  .evidence-item:first-child { border-top: none; }
+  pre { white-space: pre-wrap; word-break: break-word; background: #fff; border: 1px solid #e5e8ec; padding: 0.5rem; border-radius: 4px; font-size: 0.72rem; }
+  .limitations li { margin-bottom: 0.4rem; font-size: 0.85rem; }
+  .footer-note { margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid #d9dde3; font-size: 0.75rem; color: #5b6472; }
+  .print-actions { margin: 1rem 0; }
+  .print-actions button { font: inherit; padding: 0.5rem 1rem; border-radius: 6px; border: 1px solid #33404d; background: #1a1f27; color: white; cursor: pointer; }
+  @media print { .print-actions { display: none; } body { padding: 0.5in; } }
+  .empty-note { color: #5b6472; font-size: 0.85rem; font-style: italic; }
+</style>
+</head>
+<body>
+
+<div class="print-actions"><button onclick="window.print()">Print / Save as PDF</button></div>
+
+<div class="eyebrow">{{ report.parent_brand }}</div>
+<h1>{{ report.report_name }}</h1>
+<div class="eyebrow">Prepared for review of {{ report.domain }}</div>
+
+<div class="meta-grid">
+  <div class="meta-item"><div class="label">Domain</div><div class="value">{{ report.domain }}</div></div>
+  <div class="meta-item"><div class="label">Scan status</div><div class="value">{{ report.status }}</div></div>
+  <div class="meta-item"><div class="label">Pages scanned</div><div class="value">{{ report.pages_scanned }} (max {{ report.max_pages }})</div></div>
+  <div class="meta-item"><div class="label">Authorization confirmed</div><div class="value">{{ report.authorization_confirmed_at }}</div></div>
+  <div class="meta-item"><div class="label">Started</div><div class="value">{{ report.started_at or "—" }}</div></div>
+  <div class="meta-item"><div class="label">Completed</div><div class="value">{{ report.completed_at or "—" }}</div></div>
+  <div class="meta-item"><div class="label">Report generated</div><div class="value">{{ report.generated_at }}</div></div>
+  <div class="meta-item"><div class="label">Acquisition notes</div><div class="value">{{ report.notes or "—" }}</div></div>
+</div>
+
+{% if report.is_demo %}
+<div class="meta-item" style="border-color:#8a5a00; background:#fbeecb; margin-bottom:1rem;">
+  <div class="label">Synthetic demo data</div>
+  <div class="value">This scan uses fabricated fixture data for demonstration purposes only. It does not reflect a real assessment.</div>
+</div>
+{% endif %}
+
+<h2>Risk summary</h2>
+<div class="meta-grid" style="grid-template-columns: repeat(4, 1fr);">
+  <div class="meta-item"><div class="label">High</div><div class="value"><span class="badge badge-high">{{ report.severity_counts.high }}</span></div></div>
+  <div class="meta-item"><div class="label">Medium</div><div class="value"><span class="badge badge-medium">{{ report.severity_counts.medium }}</span></div></div>
+  <div class="meta-item"><div class="label">Low</div><div class="value"><span class="badge badge-low">{{ report.severity_counts.low }}</span></div></div>
+  <div class="meta-item"><div class="label">Info</div><div class="value"><span class="badge badge-info">{{ report.severity_counts.info }}</span></div></div>
+</div>
+
+<h2>Prioritized risk register</h2>
+{% if report.findings %}
+  {% for f in report.findings %}
+  <div class="finding">
+    <div class="finding-title-row">
+      <span class="badge badge-{{ f.severity }}">{{ f.severity }}</span>
+      <span class="badge badge-status">confidence: {{ f.confidence }}</span>
+      <span class="finding-title">{{ f.title }}</span>
+    </div>
+    <div class="finding-field"><div class="label">Category</div><div>{{ f.category }}</div></div>
+    <div class="finding-field"><div class="label">Impact (observation → interpretation)</div><div>{{ f.impact }}</div></div>
+    <div class="finding-field"><div class="label">Recommended next step</div><div>{{ f.recommended_next_step }}</div></div>
+    <details class="evidence">
+      <summary>Linked evidence ({{ f.evidence|length }})</summary>
+      {% for e in f.evidence %}
+      <div class="evidence-item">
+        <div><strong>{{ e.category }}</strong> — {{ e.source_type }} — confidence: {{ e.confidence }}</div>
+        <div>{{ e.human_readable_summary }}</div>
+        <div style="color:#5b6472; font-size:0.72rem;">Source: {{ e.source_url_or_identifier }} · captured {{ e.captured_at }}</div>
+      </div>
+      {% endfor %}
+    </details>
+  </div>
+  {% endfor %}
+{% else %}
+  <p class="empty-note">No findings were raised by the deterministic rules engine for the evidence collected in this scan.</p>
+{% endif %}
+
+<h2>DNS and email posture</h2>
+<table>
+  <thead><tr><th>Record</th><th>Values / status</th></tr></thead>
+  <tbody>
+  {% for r in report.dns_email.records %}
+    <tr><td>{{ r.record_type }}</td><td>{% if r.lookup_successful %}{{ r.record_values|join(", ") if r.record_values else "none" }}{% else %}lookup failed: {{ r.error_message }}{% endif %}</td></tr>
+  {% endfor %}
+  {% if report.dns_email.spf %}
+    <tr><td>SPF</td><td>{{ report.dns_email.spf.record or "not present" }}</td></tr>
+  {% endif %}
+  {% if report.dns_email.dmarc %}
+    <tr><td>DMARC</td><td>{{ report.dns_email.dmarc.record or "not present" }} {% if report.dns_email.dmarc.policy %}(policy: {{ report.dns_email.dmarc.policy }}){% endif %}</td></tr>
+  {% endif %}
+  </tbody>
+</table>
+
+<h2>HTTP and security headers</h2>
+{% if report.http_security %}
+<table>
+  <tbody>
+    <tr><td>Final URL</td><td>{{ report.http_security.final_url }}</td></tr>
+    <tr><td>Status code</td><td>{{ report.http_security.status_code }}</td></tr>
+    <tr><td>HTTPS</td><td>{{ "Yes" if report.http_security.is_https else "No" }}</td></tr>
+    <tr><td>Strict-Transport-Security</td><td>{{ report.http_security.strict_transport_security or "not present" }}</td></tr>
+    <tr><td>Content-Security-Policy</td><td>{{ report.http_security.content_security_policy or "not present" }}</td></tr>
+    <tr><td>X-Content-Type-Options</td><td>{{ report.http_security.x_content_type_options or "not present" }}</td></tr>
+    <tr><td>X-Frame-Options</td><td>{{ report.http_security.x_frame_options or "not present" }}</td></tr>
+    <tr><td>Referrer-Policy</td><td>{{ report.http_security.referrer_policy or "not present" }}</td></tr>
+    <tr><td>Server header</td><td>{{ report.http_security.server_header or "not present" }}</td></tr>
+  </tbody>
+</table>
+{% else %}
+<p class="empty-note">No HTTP observation was recorded.</p>
+{% endif %}
+
+<h2>Crawl and indexability</h2>
+<p>{{ report.crawl_indexability.pages_scanned }} pages scanned; {{ report.crawl_indexability.error_page_count }} returned a 4xx/5xx status.</p>
+<table>
+  <thead><tr><th>URL</th><th>Status</th><th>Title</th><th>Canonical</th><th>H1 count</th></tr></thead>
+  <tbody>
+  {% for p in report.crawl_indexability.pages %}
+    <tr><td>{{ p.url }}</td><td>{{ p.status_code or "error" }}</td><td>{{ p.title or "—" }}</td><td>{{ "yes" if p.canonical_url else "no" }}</td><td>{{ p.h1_count }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h2>Technology and dependencies</h2>
+{% if report.technology.technologies %}
+<table>
+  <thead><tr><th>Technology</th><th>Category</th><th>Detection method</th><th>Confidence</th></tr></thead>
+  <tbody>
+  {% for t in report.technology.technologies %}
+    <tr><td>{{ t.technology_name }}</td><td>{{ t.category }}</td><td>{{ t.detection_method }}</td><td>{{ t.confidence }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty-note">No technologies were positively identified by local rules-based detection.</p>
+{% endif %}
+
+<h2>Performance</h2>
+{% if report.performance %}
+<table>
+  <tbody>
+    <tr><td>Provider</td><td>{{ report.performance.provider }}{% if not report.performance.configured %} (external provider not configured — local measurements only){% endif %}</td></tr>
+    <tr><td>Homepage response time</td><td>{{ report.performance.response_duration_ms }} ms</td></tr>
+    <tr><td>HTML payload size</td><td>{{ report.performance.html_bytes }} bytes</td></tr>
+    <tr><td>Third-party domains</td><td>{{ report.performance.third_party_domain_count }}</td></tr>
+    <tr><td>JS resource requests</td><td>{{ report.performance.js_resource_count }}</td></tr>
+    {% if report.performance.performance_score is not none %}
+    <tr><td>PageSpeed performance score</td><td>{{ report.performance.performance_score }}</td></tr>
+    <tr><td>LCP / CLS / INP / FCP / TTFB</td><td>{{ report.performance.lcp_ms }}ms / {{ report.performance.cls }} / {{ report.performance.inp_ms }}ms / {{ report.performance.fcp_ms }}ms / {{ report.performance.ttfb_ms }}ms</td></tr>
+    {% endif %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty-note">No performance observation was recorded.</p>
+{% endif %}
+
+<h2>Known limitations of this scan</h2>
+<ul class="limitations">
+  {% for l in report.limitations %}
+  <li><strong>{{ l.task_name }}:</strong> {{ l.message }}</li>
+  {% endfor %}
+</ul>
+
+<div class="footer-note">
+  {{ report.product_name }} is a technical pre-screen produced by {{ report.parent_brand }}. It converts
+  bounded public technical evidence into a prioritized risk register and recommended next steps. It is not a
+  vulnerability scan, penetration test, or legal/financial audit, and findings described as "hardening
+  opportunities" are not confirmed vulnerabilities. Generated {{ report.generated_at }}.
+</div>
+
+</body>
+</html>
