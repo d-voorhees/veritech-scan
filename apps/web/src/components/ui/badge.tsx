@@ -35,6 +35,8 @@ export function severityToVariant(severity: string): BadgeProps["variant"] {
       return "medium";
     case "low":
       return "low";
+    case "ok":
+      return "success";
     default:
       return "info";
   }

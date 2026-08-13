@@ -26,6 +26,8 @@ class FindingOut(BaseModel):
     title: str
     impact: str
     recommended_next_step: str
+    dollar_impact: str
+    remediation_timing: str
     status: str
     rule_version: int
     created_at: datetime

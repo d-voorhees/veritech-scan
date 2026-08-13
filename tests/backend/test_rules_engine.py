@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 
+import pytest
+
 from app.models.evidence import EvidenceItem
 from app.models.finding import Finding, FindingEvidence
 from app.models.observation import (
@@ -87,9 +89,52 @@ def test_dmarc_policy_none_produces_low_severity_finding(db, scan_request):
     assert finding is not None
     assert finding.severity == "low"
     assert finding.confidence == "high"
+    assert finding.rule_version == 2
 
 
-def test_dkim_selector_found_produces_info_finding(db, scan_request):
+def test_dmarc_record_with_no_policy_tag_fires_as_malformed(db, scan_request):
+    """v2 regression test: a DMARC record with no p= tag at all (e.g.
+    "v=DMARC1;") used to silently pass — dmarc_policy_none only checked
+    `policy != "none"`, which is true for None too, so a malformed record
+    with no usable policy never fired anything. It must now fire, and at a
+    higher severity than a well-formed p=none."""
+    _evidence(db, scan_request, "email_posture", "spf_dmarc_lookup")
+    db.add(
+        DNSObservation(
+            scan_request_id=scan_request.id, record_type="DMARC", name="_dmarc.example.com",
+            values=["v=DMARC1;"], lookup_successful=True,
+            dmarc_record="v=DMARC1;", dmarc_policy=None,
+        )
+    )
+    db.commit()
+
+    run_rules_engine(db, scan_request)
+
+    finding = (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.title.like("DMARC record is malformed%"))
+        .first()
+    )
+    assert finding is not None
+    assert finding.severity == "medium"
+    assert finding.rule_version == 2
+    assert finding.dollar_impact == "$$"
+    assert finding.remediation_timing == "30-day"
+
+    # missing_dmarc must not also fire — the record does exist, it's just malformed.
+    assert (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.title == "No DMARC record found")
+        .first()
+        is None
+    )
+
+
+def test_dkim_selector_found_produces_ok_severity_finding(db, scan_request):
+    """dkim_selector_found is a positive observation, not a risk — it uses
+    the "ok" severity so report_builder keeps it out of the risk register
+    (see REGISTER_SEVERITIES) while still showing it in the rules-coverage
+    table."""
     _evidence(db, scan_request, "email_posture", "spf_dmarc_lookup")
     db.add(
         DNSObservation(
@@ -107,8 +152,10 @@ def test_dkim_selector_found_produces_info_finding(db, scan_request):
         .first()
     )
     assert finding is not None
-    assert finding.severity == "info"
+    assert finding.severity == "ok"
     assert "google" in finding.title
+    assert finding.dollar_impact == "n/a"
+    assert finding.remediation_timing == "n/a"
 
 
 def test_dkim_selector_found_does_not_fire_without_a_hit(db, scan_request):
@@ -248,6 +295,167 @@ def test_pagespeed_rule_fires_when_configured_and_below_threshold(db, scan_reque
     )
     assert finding is not None
     assert finding.severity == "medium"
+
+
+# --- LCP thresholds (Core Web Vitals), independent of overall PageSpeed score ---
+
+
+def test_lcp_poor_mobile_fires_above_4000ms(db, scan_request):
+    _evidence(db, scan_request, "performance", "performance_measurement")
+    db.add(
+        PerformanceObservation(
+            scan_request_id=scan_request.id, provider="google_pagespeed", configured=True, mobile_lcp_ms=6015,
+            mobile_performance_score=73,
+        )
+    )
+    db.commit()
+    run_rules_engine(db, scan_request)
+    finding = (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.title.like("Mobile Largest Contentful Paint%"))
+        .first()
+    )
+    assert finding is not None
+    assert finding.severity == "medium"
+    assert "poor" in finding.title
+    assert finding.dollar_impact == "$$"
+    assert finding.remediation_timing == "60-day"
+    # This is the mediumandmessage.com regression: a 6s mobile LCP passing
+    # because the overall mobile performance score (73) was above the
+    # pagespeed_mobile_below_50 threshold. That rule must not fire here...
+    assert (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.category == "performance")
+        .filter(Finding.title.like("Mobile PageSpeed%"))
+        .first()
+        is None
+    )
+    # ...while the LCP-specific rule does, independent of the overall score.
+
+
+def test_lcp_needs_improvement_mobile_fires_low_severity(db, scan_request):
+    _evidence(db, scan_request, "performance", "performance_measurement")
+    db.add(
+        PerformanceObservation(
+            scan_request_id=scan_request.id, provider="google_pagespeed", configured=True, mobile_lcp_ms=3200,
+        )
+    )
+    db.commit()
+    run_rules_engine(db, scan_request)
+    finding = (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.title.like("Mobile Largest Contentful Paint%"))
+        .first()
+    )
+    assert finding is not None
+    assert finding.severity == "low"
+    assert "needs improvement" in finding.title
+
+
+def test_lcp_poor_desktop_fires_independently_of_mobile(db, scan_request):
+    _evidence(db, scan_request, "performance", "performance_measurement")
+    db.add(
+        PerformanceObservation(
+            scan_request_id=scan_request.id, provider="google_pagespeed", configured=True,
+            desktop_lcp_ms=4500, mobile_lcp_ms=1200,
+        )
+    )
+    db.commit()
+    run_rules_engine(db, scan_request)
+    assert (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.title.like("Desktop Largest Contentful Paint%"))
+        .first()
+        is not None
+    )
+    assert (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.title.like("Mobile Largest Contentful Paint%"))
+        .first()
+        is None
+    )
+
+
+def test_lcp_does_not_fire_at_or_below_good_threshold(db, scan_request):
+    _evidence(db, scan_request, "performance", "performance_measurement")
+    db.add(
+        PerformanceObservation(
+            scan_request_id=scan_request.id, provider="google_pagespeed", configured=True,
+            desktop_lcp_ms=2000, mobile_lcp_ms=2500,
+        )
+    )
+    db.commit()
+    run_rules_engine(db, scan_request)
+    assert (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.title.like("%Largest Contentful Paint%"))
+        .first()
+        is None
+    )
+
+
+def test_lcp_does_not_fire_when_pagespeed_not_configured(db, scan_request):
+    db.add(
+        PerformanceObservation(
+            scan_request_id=scan_request.id, provider="local", configured=False, mobile_lcp_ms=9000,
+        )
+    )
+    db.commit()
+    run_rules_engine(db, scan_request)
+    assert (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.title.like("%Largest Contentful Paint%"))
+        .first()
+        is None
+    )
+
+
+# --- Priority 3: every rule sets dollar_impact and remediation_timing ------------
+
+
+def test_domain_and_tls_expiration_use_risk_of_inaction_dollar_band(db, scan_request):
+    """domain_registration_expiring_soon and tls_certificate_expiring_or_expired
+    both have a trivial direct fix cost but a severe cost of inaction — both
+    should band as $$$/30-day regardless of severity branch."""
+    _evidence(
+        db, scan_request, "tls", "tls_certificate",
+        payload={"issuer": "Let's Encrypt", "not_after": "2026-01-01T00:00:00+00:00", "days_until_expiry": 10},
+    )
+    _evidence(
+        db, scan_request, "domain_registration", "rdap_lookup",
+        payload={"registrar": "GoDaddy", "expiration_date": "2026-09-01T00:00:00Z", "days_until_expiration": 20},
+    )
+    db.commit()
+
+    run_rules_engine(db, scan_request)
+
+    tls_finding = (
+        db.query(Finding).filter(Finding.scan_request_id == scan_request.id, Finding.title.like("TLS certificate%")).first()
+    )
+    domain_finding = (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.category == "domain_registration")
+        .first()
+    )
+    for finding in (tls_finding, domain_finding):
+        assert finding is not None
+        assert finding.dollar_impact == "$$$"
+        assert finding.remediation_timing == "30-day"
+
+
+def test_rule_result_requires_dollar_impact_and_remediation_timing():
+    """dollar_impact/remediation_timing have no dataclass default (see
+    RuleResult), so a rule that forgets to set one fails immediately at
+    call time instead of silently shipping a half-labeled finding —
+    Priority 3 explicitly asks that every rule get both fields or the
+    whole priority be held."""
+    from app.rules.definitions import RuleResult
+
+    with pytest.raises(TypeError):
+        RuleResult(
+            rule_key="x", version=1, category="x", severity="low", confidence="high",
+            title="x", impact="x", recommended_next_step="x",
+        )
 
 
 def test_every_finding_links_to_at_least_one_evidence_item(db, scan_request):

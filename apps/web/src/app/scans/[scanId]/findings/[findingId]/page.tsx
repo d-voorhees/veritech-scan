@@ -46,6 +46,8 @@ export default function FindingDetailPage({
             <Badge variant={severityToVariant(finding.severity)}>{finding.severity}</Badge>
             <Badge variant="outline">confidence: {finding.confidence}</Badge>
             <Badge variant="outline">{titleCase(finding.category)}</Badge>
+            {finding.dollar_impact !== "n/a" && <Badge variant="outline">impact: {finding.dollar_impact}</Badge>}
+            {finding.remediation_timing !== "n/a" && <Badge variant="outline">{finding.remediation_timing}</Badge>}
           </div>
           <h1 className="mt-2 text-xl font-semibold tracking-tight">{finding.title}</h1>
 

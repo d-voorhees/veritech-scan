@@ -60,6 +60,8 @@ def run_rules_engine(db: Session, scan: ScanRequest) -> list[uuid.UUID]:
             title=result.title,
             impact=result.impact,
             recommended_next_step=result.recommended_next_step,
+            dollar_impact=result.dollar_impact,
+            remediation_timing=result.remediation_timing,
         )
         db.add(finding)
         db.flush()

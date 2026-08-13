@@ -123,11 +123,13 @@ export interface EvidenceItem {
 export interface Finding {
   id: string;
   category: string;
-  severity: "info" | "low" | "medium" | "high";
+  severity: "ok" | "info" | "low" | "medium" | "high";
   confidence: "low" | "medium" | "high";
   title: string;
   impact: string;
   recommended_next_step: string;
+  dollar_impact: string;
+  remediation_timing: string;
   status: string;
   rule_version: number;
   created_at: string;
@@ -156,13 +158,14 @@ export interface ReportOut {
   dns_email: Record<string, unknown>;
   http_security: Record<string, unknown>;
   crawl_indexability: Record<string, unknown>;
-  technology: { technologies: Array<Record<string, unknown>> };
+  technology: { platform: Record<string, unknown> | null; technologies: Array<Record<string, unknown>> };
   third_party_dependencies: { domains: Array<Record<string, unknown>> };
   performance: Record<string, unknown>;
   tls: Record<string, unknown>;
   platform_exposure: Record<string, unknown>;
   domain_registration: Record<string, unknown>;
   accessibility: Record<string, unknown>;
+  scope_statement: string;
   limitations: Array<{ task_name: string; message: string }>;
   generated_at: string;
 }

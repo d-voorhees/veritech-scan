@@ -50,5 +50,6 @@ class ReportOut(BaseModel):
     domain_registration: dict
     accessibility: dict
 
+    scope_statement: str
     limitations: list[LimitationOut]
     generated_at: datetime

@@ -2,6 +2,116 @@
 
 All notable changes to this project are documented in this file.
 
+## v4 — 2026-08-13
+
+### Added
+
+- **Dollar impact and remediation timing on every finding.** The risk
+  register's Severity/Finding/Category/Confidence columns now also show a
+  rough dollar-impact band (`$`/`$$`/`$$$`) and a suggested remediation
+  timing (`30-day`/`60-day`/`90-day`/`longer-term`), both set by the rule
+  itself, never the reader. `Finding` gained `dollar_impact` and
+  `remediation_timing` columns (migration `c3e9a1f7b214`); `RuleResult`
+  makes both **required, no-default** fields, so a rule that forgets one
+  fails immediately instead of shipping a half-labeled finding. All 26
+  rules set both. A few findings (`domain_registration_expiring_soon`,
+  `tls_certificate_expiring_or_expired`) intentionally band at `$$$`
+  regardless of severity — the direct fix is cheap, but the cost of
+  inaction (losing the domain or breaking HTTPS entirely) is severe.
+  Methodology documented in `docs/rules-engine.md`.
+- **Severity/confidence legend.** A short, linked legend now explains what
+  each severity level, confidence level, dollar-impact band, and
+  remediation-timing value means — a non-technical reader previously had
+  no way to tell why one finding was "medium confidence" and another "high."
+- **Redirect chain display and flagging.** The report now shows the full
+  redirect chain that got a scan from the requested URL to the final one
+  (`http_observations.redirect_chain` was already collected but never
+  rendered), and flags chains longer than one hop or that mix http/https
+  schemes with a "worth a look" badge.
+- **Sitemap freshness.** `<lastmod>` dates are now parsed from every
+  sitemap entry (`robots_sitemap.py::_parse_sitemap_xml`/`_summarize_lastmods`)
+  and the newest/oldest values shown under Crawl and indexability — a
+  sitemap untouched in years is itself a maintenance signal. No new
+  collector needed; the sitemap was already being fetched.
+- **Hosting fingerprint.** `Server`, `X-Powered-By`, `cf-ray`, and similar
+  hosting/infra headers are now surfaced verbatim under Platform and stack
+  (no rule fires on this — it's context, not a finding).
+- **Platform/CMS detection as its own signal.** Technology detection
+  previously only ever reported the libraries/analytics running *on top of*
+  a site, never the platform itself. `report_builder._detect_platform` now
+  picks the highest-confidence CMS/ecommerce-platform/website-builder/
+  headless-CMS/static-site-framework match, or — when none of those fired —
+  falls back to a "looks like static HTML" heuristic from the crawled URLs
+  (e.g. correctly identified mediumandmessage.com, which has no CMS, as a
+  static HTML site).
+- **LCP-specific rules, independent of the overall PageSpeed score.**
+  `lcp_poor_mobile` and `lcp_poor_desktop` now fire on Largest Contentful
+  Paint alone (standard thresholds: good ≤2.5s, needs improvement 2.5-4s,
+  poor >4s), catching the case where a real ~6s mobile LCP passed unnoticed
+  because the overall mobile Performance score (73) was above the
+  `pagespeed_mobile_below_50` threshold.
+
+### Changed
+
+- **Report reordered around acquisition-relevant questions, not collector
+  build order.** New order after the risk register: **Business
+  continuity** (domain registration + TLS certificate + HTTPS/final-URL/
+  redirect chain, grouped under one heading — "will this still be here in
+  60 days") → HTTP and security headers → **Platform and stack**
+  (technology/CMS, third-party dependencies, xmlrpc.php/wp-json exposure —
+  "what am I inheriting") → Crawl and indexability → **Email posture**
+  (renamed from "DNS and email posture," domain registration moved out) →
+  Performance → Accessibility → Known limitations. Applied to both the
+  HTML export (`report.html.jinja`) and the dashboard
+  (`apps/web/.../scans/[scanId]/page.tsx`).
+- **Rules-coverage table collapsed by default.** The 26-row table (was
+  sitting uncollapsed between the risk summary and the risk register,
+  interrupting the read) now renders inside a `<details>` labeled "26
+  rules checked, N raised a finding or observation — expand for the full
+  list," open on demand.
+- **"info" severity split: positive observations no longer share a label
+  with real (if mild) risks.** Added a fifth severity, `ok`
+  (`REGISTER_SEVERITIES` in `app/models/finding.py`), for findings that are
+  themselves good news — currently only `dkim_selector_found`. `ok`-severity
+  findings still fire and still show in the rules-coverage table (styled as
+  "positive"), but `report_builder.build_report` excludes them from the
+  risk register and its severity counts. `wp_json_rest_api_exposed` (a mild
+  negative) stays at `info` and keeps appearing in the register.
+- **Known limitations consolidated.** Three identically-labeled "General:"
+  notes (which read as the same note repeated three times) are now one
+  lead sentence naming what the scan is (bounded, rate-limited, public-web
+  pre-screen) followed by the specific caveats as a short, unlabeled list.
+  `ReportOut` gained a `scope_statement` field.
+- **Friendlier phrasing reused in the register.** Where a report section
+  already had a clearer phrasing of a fact than the register did (e.g.
+  Accessibility's "Form fields with labels: 0 of 7" vs. the register's "7
+  of 7 ... missing an associated label (100%)"), the register now uses it.
+- **Robots.txt Disallow rules: friendlier empty state.** Shows "No Disallow
+  rules declared" instead of a bare "none" next to the row label.
+
+### Fixed
+
+- **DMARC record with no `p=` tag silently passed as OK.**
+  `dmarc_policy_none` (now **v2**) only checked `dmarc_policy != "none"`,
+  which is true for a missing tag too — so a malformed record like
+  `v=DMARC1;` (no policy tag at all, functionally equivalent to no DMARC
+  record) never fired anything and the "DMARC policy stronger than
+  monitor-only" check read as passing. Reproduced live against
+  mediumandmessage.com's actual DMARC record. Now fires at `medium`
+  severity ("DMARC record is malformed — no policy (p=) tag found"),
+  strictly worse than a well-formed `p=none` (`low`).
+- **Sitemap cross-check false-positived on `/index.html` vs. `/`.**
+  `https://example.com/index.html` was flagged "crawled but not declared
+  in sitemap" even when the sitemap already declared `/`, because the
+  comparison only normalized trailing slashes, not index-file URLs.
+  `report_builder._path_key` now also collapses `/index.html`/`/index.htm`
+  to `/`, symmetrically for both the "crawled but not in sitemap" and
+  "in sitemap but not crawled" directions.
+- **TTFB values near zero looked like a measurement bug.** A PageSpeed
+  Insights "server response time" of 1-2ms is almost always a cached/edge
+  response, not a broken measurement. Added an explanatory caption under
+  the performance table instead of leaving the number unexplained.
+
 ## v3 — 2026-08-13
 
 ### Changed

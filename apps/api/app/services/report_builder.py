@@ -15,6 +15,7 @@ from app.models.observation import (
     TechnologyObservation,
     ThirdPartyDependency,
 )
+from app.models.finding import REGISTER_SEVERITIES
 from app.models.page import Page
 from app.models.scan import JOB_STATUS_FAILED, ScanJob, ScanRequest
 from app.rules.definitions import RULE_CATALOG
@@ -23,14 +24,79 @@ from app.schemas.report import FindingSeverityCounts, LimitationOut, ReportOut
 
 SITEMAP_CROSS_CHECK_SAMPLE_LIMIT = 20
 
+# Platform/CMS/framework-identifying technology categories (see
+# collectors/technology.py::DETECTION_RULES) — used to pick out a single
+# "what platform is this built on" headline for the Platform and stack
+# section, distinct from the full technology/dependency inventory.
+PLATFORM_TECHNOLOGY_CATEGORIES = {
+    "cms",
+    "ecommerce_platform",
+    "website_builder",
+    "headless_cms",
+    "static_site_framework",
+}
+_CONFIDENCE_RANK = {"high": 0, "medium": 1, "low": 2}
+
+# Hosting/infra signal headers worth surfacing verbatim — not fired on by any
+# rule, just displayed (Priority 5c). Keys are lowercase header names; values
+# are the human-facing label.
+HOSTING_FINGERPRINT_HEADERS = {
+    "server": "Server",
+    "x-powered-by": "X-Powered-By",
+    "cf-ray": "cf-ray (Cloudflare)",
+    "x-vercel-id": "X-Vercel-Id",
+    "x-nf-request-id": "X-NF-Request-Id (Netlify)",
+    "x-amz-cf-id": "X-Amz-Cf-Id (CloudFront)",
+}
+
 
 def _path_key(url: str) -> str:
     """Path identity for cross-referencing crawled pages against sitemap/robots
-    URLs — same trailing-slash collapsing as the crawler's own dedupe key."""
+    URLs — same trailing-slash collapsing as the crawler's own dedupe key,
+    plus index-file normalization (index.html/.htm) so e.g. /index.html and
+    / are treated as the same page instead of a false-positive mismatch."""
     path = urlsplit(url).path or "/"
+    for index_name in ("/index.html", "/index.htm"):
+        if path.lower().endswith(index_name):
+            path = path[: -len(index_name)] + "/"
+            break
     if len(path) > 1 and path.endswith("/"):
         path = path.rstrip("/")
-    return path
+    return path or "/"
+
+
+def _detect_platform(tech_obs: list[TechnologyObservation], pages: list[Page]) -> dict | None:
+    """Picks one "what is this site built on" headline (Priority 5d): the
+    highest-confidence CMS/ecommerce/website-builder/headless-CMS/static-site
+    framework technology already detected, or — when none of those matched —
+    a best-effort "looks like static HTML" heuristic from the crawled URLs
+    themselves, so a plain static site doesn't just silently show nothing
+    under "platform"."""
+    candidates = [t for t in tech_obs if t.category in PLATFORM_TECHNOLOGY_CATEGORIES]
+    if candidates:
+        best = min(candidates, key=lambda t: _CONFIDENCE_RANK.get(t.confidence, 9))
+        return {
+            "name": best.technology_name,
+            "category": best.category,
+            "confidence": best.confidence,
+            "detection_method": best.detection_method,
+            "heuristic": False,
+        }
+
+    urls = [p.final_url or p.url for p in pages if p.url]
+    static_like = [u for u in urls if urlsplit(u).path.lower().endswith((".html", ".htm"))]
+    if urls and static_like:
+        pct = round(100 * len(static_like) / len(urls))
+        return {
+            "name": "Static HTML site (no CMS or framework detected)",
+            "category": "static_html",
+            "confidence": "medium",
+            "detection_method": f"{len(static_like)} of {len(urls)} crawled URL(s) ({pct}%) end in .html/.htm "
+            "and no CMS, ecommerce platform, website builder, headless CMS, or static-site-generator marker "
+            "was found on the homepage.",
+            "heuristic": True,
+        }
+    return None
 
 
 def _build_sitemap_check(
@@ -65,6 +131,11 @@ def _build_sitemap_check(
         "sitemap_not_crawled_sample": sitemap_not_crawled[:SITEMAP_CROSS_CHECK_SAMPLE_LIMIT],
         "crawled_but_disallowed_count": len(crawled_but_disallowed),
         "crawled_but_disallowed_sample": crawled_but_disallowed[:SITEMAP_CROSS_CHECK_SAMPLE_LIMIT],
+        # Priority 5b: sitemap freshness — newest/oldest <lastmod> across
+        # every sitemap entry that declared one.
+        "lastmod_count": (sitemap_evidence.normalized_payload_json.get("lastmod_count") if sitemap_evidence else 0) or 0,
+        "newest_lastmod": sitemap_evidence.normalized_payload_json.get("newest_lastmod") if sitemap_evidence else None,
+        "oldest_lastmod": sitemap_evidence.normalized_payload_json.get("oldest_lastmod") if sitemap_evidence else None,
     }
 
 
@@ -94,7 +165,10 @@ def _build_coverage(findings: list[Finding]) -> dict:
 def _build_rules_checked(findings: list[Finding]) -> dict:
     """Maps every rule in the static RULE_CATALOG against this scan's actual
     findings, so the report can show "N rules checked, M raised a finding"
-    instead of only ever listing the rules that happened to fire."""
+    instead of only ever listing the rules that happened to fire. Includes
+    "ok"-severity (positive-observation) findings too — those never appear
+    in the risk register, but they did fire, and this table's job is to
+    account for every rule's actual outcome."""
     fired_by_rule_key = {f.rule.rule_key: f for f in findings if f.rule}
 
     rules: list[dict] = []
@@ -109,6 +183,7 @@ def _build_rules_checked(findings: list[Finding]) -> dict:
                 "severity": finding.severity if finding else None,
                 "title": finding.title if finding else None,
                 "finding_id": str(finding.id) if finding else None,
+                "positive_observation": finding.severity == "ok" if finding else False,
             }
         )
 
@@ -119,13 +194,17 @@ def _build_rules_checked(findings: list[Finding]) -> dict:
     }
 
 
-KNOWN_LIMITATIONS = [
-    "This is a bounded, rate-limited public-web pre-screen, not a penetration test or "
-    "vulnerability scan. Absence of a finding is not proof of absence of risk.",
-    "The crawler does not enforce robots.txt while fetching pages. It separately cross-references "
-    "the crawled page set against robots.txt Disallow rules for User-agent: * (plain prefix "
-    "matching only — wildcard and end-anchor patterns are not evaluated) and against declared "
-    "sitemap URLs, reported under Crawl and indexability.",
+# Priority 6d: one lead sentence naming what this scan is, followed by the
+# specific caveats as a short list — replaces three identically-labeled
+# "General:" rows that used to read as the same note repeated.
+SCAN_SCOPE_STATEMENT = (
+    "This is a bounded, rate-limited public-web pre-screen, not a penetration test or vulnerability scan "
+    "— absence of a finding here is not proof of absence of risk."
+)
+KNOWN_LIMITATION_CAVEATS = [
+    "The crawler does not enforce robots.txt while fetching pages; it separately cross-references the "
+    "crawled page set against robots.txt Disallow rules (plain prefix matching only) and declared sitemap "
+    "URLs — see Crawl and indexability.",
     f"DKIM discovery probes {len(COMMON_DKIM_SELECTORS)} common ESP-default selectors (Google Workspace, "
     "Microsoft 365, Mailchimp, SendGrid, etc.); a domain signing only with a custom selector will not be "
     "found, so a missing DKIM result is not proof of absence.",
@@ -136,7 +215,7 @@ KNOWN_LIMITATIONS = [
 def build_report(db: Session, scan: ScanRequest) -> ReportOut:
     settings = get_settings()
 
-    severity_rank = {"high": 0, "medium": 1, "low": 2, "info": 3}
+    severity_rank = {"high": 0, "medium": 1, "low": 2, "info": 3, "ok": 4}
     findings = (
         db.query(Finding)
         .options(
@@ -147,11 +226,15 @@ def build_report(db: Session, scan: ScanRequest) -> ReportOut:
         .all()
     )
     findings.sort(key=lambda f: (severity_rank.get(f.severity, 9), f.created_at))
+    # "ok"-severity findings (positive observations, e.g. DKIM signing found)
+    # fired and are accounted for in the rules-coverage table below, but they
+    # are not risks — they never appear in the risk register or its counts.
+    register_findings = [f for f in findings if f.severity in REGISTER_SEVERITIES]
     rules_checked = _build_rules_checked(findings)
 
     severity_counts = FindingSeverityCounts()
     finding_outs: list[FindingOut] = []
-    for f in findings:
+    for f in register_findings:
         evidence = [link.evidence_item for link in f.evidence_links]
         finding_outs.append(
             FindingOut(
@@ -162,6 +245,8 @@ def build_report(db: Session, scan: ScanRequest) -> ReportOut:
                 title=f.title,
                 impact=f.impact,
                 recommended_next_step=f.recommended_next_step,
+                dollar_impact=f.dollar_impact,
+                remediation_timing=f.remediation_timing,
                 status=f.status,
                 rule_version=f.rule_version,
                 created_at=f.created_at,
@@ -271,7 +356,7 @@ def build_report(db: Session, scan: ScanRequest) -> ReportOut:
     limitations = [
         LimitationOut(task_name=job.task_name, message=job.error_message or "This collection task failed.")
         for job in failed_jobs
-    ] + [LimitationOut(task_name="general", message=msg) for msg in KNOWN_LIMITATIONS]
+    ] + [LimitationOut(task_name="", message=msg) for msg in KNOWN_LIMITATION_CAVEATS]
 
     dns_email = {
         "records": [
@@ -314,11 +399,26 @@ def build_report(db: Session, scan: ScanRequest) -> ReportOut:
 
     http_security = {}
     if http_obs:
+        redirect_chain = http_obs.redirect_chain or []
+        # Priority 5a: surface the full redirect chain (not just the final
+        # URL) and flag anything worth a second look — more than one hop, or
+        # a chain that crosses http/https along the way.
+        schemes_seen = {urlsplit(hop.get("from_url", "")).scheme for hop in redirect_chain if hop.get("from_url")}
+        schemes_seen.add(urlsplit(http_obs.final_url).scheme)
+        headers_lower = {k.lower(): v for k, v in (http_obs.headers or {}).items()}
+        hosting_fingerprint = {
+            label: headers_lower[header]
+            for header, label in HOSTING_FINGERPRINT_HEADERS.items()
+            if header in headers_lower
+        }
         http_security = {
             "final_url": http_obs.final_url,
             "status_code": http_obs.status_code,
             "is_https": http_obs.is_https,
-            "redirect_chain": http_obs.redirect_chain,
+            "redirect_chain": redirect_chain,
+            "redirect_hop_count": len(redirect_chain),
+            "redirect_mixes_schemes": len(schemes_seen - {""}) > 1,
+            "redirect_worth_flagging": len(redirect_chain) > 1 or len(schemes_seen - {""}) > 1,
             "strict_transport_security": http_obs.strict_transport_security,
             "content_security_policy": http_obs.content_security_policy,
             "x_content_type_options": http_obs.x_content_type_options,
@@ -326,6 +426,7 @@ def build_report(db: Session, scan: ScanRequest) -> ReportOut:
             "referrer_policy": http_obs.referrer_policy,
             "permissions_policy": http_obs.permissions_policy,
             "server_header": http_obs.server_header,
+            "hosting_fingerprint": hosting_fingerprint,
             "response_duration_ms": http_obs.response_duration_ms,
             "mixed_content_count": (
                 browser_render_evidence.normalized_payload_json.get("mixed_content_count")
@@ -359,6 +460,7 @@ def build_report(db: Session, scan: ScanRequest) -> ReportOut:
     }
 
     technology = {
+        "platform": _detect_platform(tech_obs, pages),
         "technologies": [
             {
                 "technology_name": t.technology_name,
@@ -367,7 +469,7 @@ def build_report(db: Session, scan: ScanRequest) -> ReportOut:
                 "confidence": t.confidence,
             }
             for t in tech_obs
-        ]
+        ],
     }
 
     third_party_rows: dict[str, dict] = {}
@@ -454,6 +556,7 @@ def build_report(db: Session, scan: ScanRequest) -> ReportOut:
         platform_exposure=exposure_evidence.normalized_payload_json if exposure_evidence else {},
         domain_registration=domain_registration_evidence.normalized_payload_json if domain_registration_evidence else {},
         accessibility=accessibility_evidence.normalized_payload_json if accessibility_evidence else {},
+        scope_statement=SCAN_SCOPE_STATEMENT,
         limitations=limitations,
         generated_at=datetime.now(timezone.utc),
     )

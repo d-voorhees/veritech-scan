@@ -2,7 +2,7 @@
 
 **Evidence-first technical pre-screening for web-business acquisitions.**
 
-Current version: **v1** — see [CHANGELOG.md](CHANGELOG.md) for full release history.
+Current version: **v4** — see [CHANGELOG.md](CHANGELOG.md) for full release history.
 
 Veritech Scan is a product of [Veritech Diligence](https://veritechdiligence.com).
 Veritech Diligence provides technical due diligence for buyers of web-based
@@ -34,14 +34,21 @@ It answers one practical question for a prospective buyer:
   technology detection, and a performance adapter (local metrics always;
   Google PageSpeed Insights optionally, when configured, for both desktop
   and mobile).
-- A deterministic, versioned rules engine (24 rules) that turns collected
+- A deterministic, versioned rules engine (26 rules) that turns collected
   evidence into severity- and confidence-scored findings — never an LLM.
   Every report lists the full rule catalog and each rule's outcome, not
   just the rules that happened to fire.
-- A full report UI: status, task panel (with per-task and total report
-  generation timing), risk register, expandable evidence,
-  DNS/HTTP/crawl/technology/performance sections, known limitations, and a
-  clean HTML export meant for "Print → Save as PDF."
+- A full report UI, ordered the way a buyer actually reads it: status, task
+  panel (with per-task and total report generation timing), risk summary, a
+  collapsed-by-default rules-coverage table, a prioritized risk register
+  (severity, confidence, rough dollar-impact band, and remediation timing
+  per finding, with a linked legend), Business continuity (domain
+  registration, TLS certificate, HTTPS/redirect chain), HTTP and security
+  headers, Platform and stack (technology/CMS detection, third-party
+  dependencies, hosting fingerprint, xmlrpc.php/wp-json exposure), Crawl
+  and indexability (incl. sitemap freshness), Email posture, Performance,
+  Accessibility, and known limitations — plus a clean HTML export meant for
+  "Print → Save as PDF."
 - Deploys to Fly.io: one always-on web/API Machine plus on-demand
   scan-runner Machines, with PostgreSQL (hosted on
   [Neon](https://neon.tech), external to Fly) as the other persistent
@@ -248,7 +255,7 @@ make lint            # ruff + mypy (backend), eslint (frontend)
 
 The backend suite (`tests/backend/`) covers URL normalization,
 SSRF/private-IP/redirect-revalidation protections, crawl URL filtering and
-max-page limits, SPF/DMARC/DKIM parsing, all 24 rules (firing and non-firing
+max-page limits, SPF/DMARC/DKIM parsing, all 26 rules (firing and non-firing
 cases), finding-to-evidence linkage, the scan creation/retrieval API and
 ownership authorization, scan status transitions, duplicate-runner
 prevention, Fly Machine creation failure handling, partial-completion

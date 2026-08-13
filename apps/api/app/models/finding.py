@@ -9,8 +9,22 @@ from app.models.base import Base, TimestampMixin, UUIDMixin
 if TYPE_CHECKING:
     from app.models.evidence import EvidenceItem
 
-SEVERITIES = ("info", "low", "medium", "high")
+SEVERITIES = ("ok", "info", "low", "medium", "high")
 CONFIDENCES = ("low", "medium", "high")
+
+# "ok" is a positive/neutral observation (e.g. DKIM signing found) — it never
+# appears in the risk register, only in the rules-coverage table. Every other
+# severity is a register-eligible risk level, from "info" (worth knowing) up
+# to "high". See docs/rules-engine.md.
+REGISTER_SEVERITIES = ("info", "low", "medium", "high")
+
+# Rough, rule-assigned bands — never exact dollars, and never set by whoever
+# is reading the report. "n/a" is for "ok"-severity (no risk, nothing to
+# price) and for findings where remediation isn't really a "fix" (e.g. a
+# purely informational signal). See docs/rules-engine.md for how a rule
+# picks its band.
+DOLLAR_IMPACT_LEVELS = ("n/a", "$", "$$", "$$$")
+REMEDIATION_TIMINGS = ("n/a", "30-day", "60-day", "90-day", "longer-term")
 
 FINDING_STATUS_OPEN = "open"
 FINDING_STATUS_ACKNOWLEDGED = "acknowledged"
@@ -47,6 +61,8 @@ class Finding(Base, UUIDMixin, TimestampMixin):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     impact: Mapped[str] = mapped_column(Text, nullable=False)
     recommended_next_step: Mapped[str] = mapped_column(Text, nullable=False)
+    dollar_impact: Mapped[str] = mapped_column(String(8), nullable=False)
+    remediation_timing: Mapped[str] = mapped_column(String(16), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default=FINDING_STATUS_OPEN)
 
     rule: Mapped["FindingRule"] = relationship()

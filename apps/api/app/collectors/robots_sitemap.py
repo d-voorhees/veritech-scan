@@ -73,14 +73,19 @@ def _parse_robots_disallow(robots_text: str) -> list[str]:
     return disallow
 
 
-def _parse_sitemap_xml(xml_text: str) -> tuple[str, list[str], list[str]]:
-    """Returns (kind, urls, parse_errors) where kind is 'urlset', 'sitemapindex', or 'unknown'."""
+def _parse_sitemap_xml(xml_text: str) -> tuple[str, list[str], list[str], list[str]]:
+    """Returns (kind, urls, lastmods, parse_errors) where kind is 'urlset',
+    'sitemapindex', or 'unknown'. `lastmods` is a parallel list of raw
+    <lastmod> text values (only for entries that had one — sitemap freshness
+    is a coarse aggregate over whatever subset of entries declare it, not
+    every URL)."""
     urls: list[str] = []
+    lastmods: list[str] = []
     errors: list[str] = []
     try:
         root = ET.fromstring(xml_text)
     except ET.ParseError as exc:
-        return "unknown", [], [f"XML parse error: {exc}"]
+        return "unknown", [], [], [f"XML parse error: {exc}"]
 
     kind = _strip_ns(root.tag)
     for child in root:
@@ -91,8 +96,55 @@ def _parse_sitemap_xml(xml_text: str) -> tuple[str, list[str], list[str]]:
             urls.append(loc_el.text.strip())
         else:
             errors.append(f"Entry missing <loc> under <{_strip_ns(child.tag)}>")
+            continue
+        lastmod_el = next((c for c in child if _strip_ns(c.tag) == "lastmod"), None)
+        if lastmod_el is not None and lastmod_el.text:
+            lastmods.append(lastmod_el.text.strip())
 
-    return kind, urls, errors
+    return kind, urls, lastmods, errors
+
+
+def _parse_lastmod_date(value: str):
+    """Sitemap <lastmod> is W3C datetime (ISO 8601), but real-world sitemaps
+    vary in precision (date-only vs. full datetime, with/without offset).
+    Best-effort parse; unparseable values are dropped rather than raising."""
+    from datetime import date, datetime
+
+    text = value.strip()
+    try:
+        if len(text) == 10:  # YYYY-MM-DD
+            return date.fromisoformat(text)
+        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _summarize_lastmods(lastmods: list[str]) -> dict:
+    from datetime import date, datetime
+
+    parsed = [(raw, _parse_lastmod_date(raw)) for raw in lastmods]
+    parsed = [(raw, d) for raw, d in parsed if d is not None]
+    if not parsed:
+        return {"lastmod_count": 0, "newest_lastmod": None, "oldest_lastmod": None}
+
+    def _sort_key(item):
+        raw, d = item
+        # Normalize date-only values to a datetime for comparison against
+        # full datetimes (midnight, naive vs. aware compared as strings
+        # would sort incorrectly across formats).
+        if isinstance(d, datetime):
+            return d.replace(tzinfo=None)
+        if isinstance(d, date):
+            return datetime(d.year, d.month, d.day)
+        return d
+
+    newest = max(parsed, key=_sort_key)
+    oldest = min(parsed, key=_sort_key)
+    return {
+        "lastmod_count": len(parsed),
+        "newest_lastmod": newest[0],
+        "oldest_lastmod": oldest[0],
+    }
 
 
 def run_robots_and_sitemap_checks(db, scan_request_id: uuid.UUID, canonical_url: str, max_pages: int) -> dict:
@@ -167,6 +219,7 @@ def run_robots_and_sitemap_checks(db, scan_request_id: uuid.UUID, canonical_url:
             sitemap_candidates.append(urljoin(origin + "/", "sitemap.xml"))
 
         discovered_urls: list[str] = []
+        all_lastmods: list[str] = []
         parsing_errors: list[str] = []
         retrieval_errors: list[str] = []
         sitemap_count = 0
@@ -178,8 +231,9 @@ def run_robots_and_sitemap_checks(db, scan_request_id: uuid.UUID, canonical_url:
                 continue
 
             sitemap_count += 1
-            kind, urls, errors = _parse_sitemap_xml(xml_text)
+            kind, urls, lastmods, errors = _parse_sitemap_xml(xml_text)
             parsing_errors.extend(f"{sitemap_url}: {e}" for e in errors)
+            all_lastmods.extend(lastmods)
 
             if kind == "sitemapindex":
                 # Follow up to 3 child sitemaps to keep this bounded.
@@ -189,14 +243,17 @@ def run_robots_and_sitemap_checks(db, scan_request_id: uuid.UUID, canonical_url:
                         retrieval_errors.append(f"{child_sitemap_url}: {c_error or f'HTTP {c_status}'}")
                         continue
                     sitemap_count += 1
-                    _, child_urls, child_errors = _parse_sitemap_xml(c_xml)
+                    _, child_urls, child_lastmods, child_errors = _parse_sitemap_xml(c_xml)
                     parsing_errors.extend(f"{child_sitemap_url}: {e}" for e in child_errors)
                     discovered_urls.extend(child_urls)
+                    all_lastmods.extend(child_lastmods)
             else:
                 discovered_urls.extend(urls)
 
             if len(discovered_urls) >= max_pages * 5:
                 break
+
+        lastmod_summary = _summarize_lastmods(all_lastmods)
 
         summary["sitemap_count"] = sitemap_count
         summary["discovered_url_count"] = len(discovered_urls)
@@ -206,6 +263,7 @@ def run_robots_and_sitemap_checks(db, scan_request_id: uuid.UUID, canonical_url:
         summary["discovered_urls"] = discovered_urls
         summary["parsing_errors"] = parsing_errors
         summary["retrieval_errors"] = retrieval_errors
+        summary.update(lastmod_summary)
 
         sitemap_evidence = EvidenceItem(
             scan_request_id=scan_request_id,
@@ -223,6 +281,9 @@ def run_robots_and_sitemap_checks(db, scan_request_id: uuid.UUID, canonical_url:
                 "discovered_urls": discovered_urls,
                 "parsing_errors": parsing_errors,
                 "retrieval_errors": retrieval_errors,
+                # Freshness signal: newest/oldest <lastmod> across every
+                # sitemap entry that declared one (not every URL does).
+                **lastmod_summary,
             },
             human_readable_summary=(
                 f"Found {sitemap_count} sitemap file(s) declaring {len(discovered_urls)} URL(s)."
