@@ -6,6 +6,13 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- **CI/CD: push-to-deploy on `main`.** `.github/workflows/deploy.yml` runs
+  the full backend (ruff/mypy/pytest) and frontend (eslint/tsc/tests) suite
+  on every push to `main`, then — only if that passes — runs
+  `flyctl deploy --remote-only`, then `./scripts/migrate-fly.sh` against the
+  image just deployed. Migrations are no longer a manual post-deploy step
+  in the normal push-to-main flow; `make fly-migrate` remains available for
+  out-of-band deploys (e.g. a manual `make fly-deploy`).
 - **Public marketing homepage and brand styling.** `/` now renders a
   Veritech Diligence-branded landing page (hero, product explanation, check
   categories, access section) with "Sign in" and "Request access" calls to

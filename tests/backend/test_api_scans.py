@@ -212,6 +212,18 @@ def test_scan_endpoints_require_authentication():
     assert anon_client.post("/api/v1/scans", json={}).status_code == 401
 
 
+def test_export_html_redirects_to_login_when_unauthenticated():
+    # This endpoint is opened directly in the browser (not fetched from the
+    # SPA), so an unauthenticated hit must be a redirect to the login page,
+    # not a raw {"detail": "Not authenticated"} JSON body.
+    import uuid
+
+    anon_client = TestClient(fastapi_app, follow_redirects=False)
+    resp = anon_client.get(f"/api/v1/scans/{uuid.uuid4()}/export/html")
+    assert resp.status_code in (302, 307)
+    assert resp.headers["location"] == "/login?session=expired"
+
+
 def test_health_endpoint_is_public():
     anon_client = TestClient(fastapi_app)
     resp = anon_client.get("/health")

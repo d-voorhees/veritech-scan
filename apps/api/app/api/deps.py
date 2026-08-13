@@ -37,6 +37,29 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
     return user
 
 
+def get_current_user_optional(request: Request, db: Session = Depends(get_db)) -> User | None:
+    """Like get_current_user, but returns None instead of raising 401.
+
+    For endpoints a user's browser navigates to directly (e.g. the HTML
+    export link), rather than ones only ever called via fetch() from the
+    SPA — a raw 401 JSON body has nowhere good to render, so those routes
+    check this themselves and redirect to /login instead.
+    """
+    token = _extract_token(request)
+    if not token:
+        return None
+
+    user_id = decode_access_token(token)
+    if not user_id:
+        return None
+
+    user = db.get(User, user_id)
+    if not user or not user.is_active:
+        return None
+
+    return user
+
+
 def require_admin(user: User = Depends(get_current_user)) -> User:
     if not user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")

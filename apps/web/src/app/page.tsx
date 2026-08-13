@@ -169,6 +169,7 @@ export default function HomePage() {
           font-weight: 700;
           letter-spacing: -0.01em;
           margin: 0 0 20px 0;
+          line-height: 1.25em;
         }
 
         .landing .section p {
@@ -273,20 +274,20 @@ export default function HomePage() {
         <div className="outer">
           <div className="hero-inner">
             <p className="eyebrow">Veritech Scan — an automated tool from Veritech Diligence</p>
-            <h1>An automated first technical read, before you spend real diligence time.</h1>
+            <h1>Run an analysis on the site you&rsquo;re about to buy. See exactly what you need to know.</h1>
             <p className="standfirst">
               Enter the domain you&rsquo;re evaluating. Scan automatically checks what&rsquo;s already public, DNS
-              posture, redirects, third-party dependencies, and the technology behind the site, then returns a risk
-              register where every finding links back to the exact evidence behind it. No analyst sits between you
-              and the result.
+              posture, redirects, third-party dependencies, and the technology behind the site, and returns a risk
+              register in minutes. No analyst sits between you and the result, and every finding links back to the
+              exact evidence behind it.
             </p>
 
             <div className="differentiator">
               <p className="eyebrow">Why it&rsquo;s different</p>
               <p>
-                Twelve deterministic rules, applied automatically, turn collected evidence into scored findings. No
-                model is guessing at what it found, and nothing is presented as more certain than the evidence
-                supports.
+                Twelve deterministic rules do the work, not a person and not a model guessing at what it found.
+                Nothing here is presented as more certain than the evidence supports, and nothing waits on
+                anyone&rsquo;s calendar.
               </p>
             </div>
 
@@ -318,7 +319,11 @@ export default function HomePage() {
                 reads what&rsquo;s already public: the DNS records, the response headers, the homepage as
                 rendered, the dependencies it loads.
               </p>
-              <p>Run automatically, in minutes rather than days, it gives you a prioritized answer to what&rsquo;s solid, what needs a closer look, and what should stop you before you go further.</p>
+              <p>
+                It runs the moment you submit a domain, no scheduling and no waiting on an analyst, and returns a
+                prioritized answer in minutes rather than days: what&rsquo;s solid, what needs a closer look, and
+                what should stop you before you go further.
+              </p>
             </div>
           </div>
         </div>
@@ -390,9 +395,9 @@ export default function HomePage() {
               <p className="eyebrow">How a finding becomes a finding</p>
               <h2>Every finding traces back to evidence.</h2>
               <p>
-                A fixed set of twelve rules, not a model guessing, turns what Scan collects into severity- and
-                confidence-scored findings. Click into any finding in the risk register and see the exact HTTP
-                response, DNS record, or rendered page behind it.
+                A fixed set of twelve rules, not a person and not a model guessing, turns what Scan collects into
+                severity- and confidence-scored findings automatically. Click into any finding in the risk register
+                and see the exact HTTP response, DNS record, or rendered page behind it.
               </p>
               <p>The system separates what it observed from what that observation might mean. A hardening opportunity is never presented as a confirmed vulnerability.</p>
             </div>
@@ -408,8 +413,8 @@ export default function HomePage() {
               <p className="eyebrow">What Scan does not do</p>
               <h2>A boundary, stated plainly.</h2>
               <p>
-                Scan is fully automated and stays within a fixed boundary: it only reads what&rsquo;s already
-                public. It does not attempt to log in, test credentials, bypass access controls, or confirm a
+                Scan is fully automated and stays inside a fixed boundary. It only reads what&rsquo;s already
+                public, and it does not attempt to log in, test credentials, bypass access controls, or confirm a
                 vulnerability by exploiting it. Where it flags something that could be a security gap, the report
                 labels it as an observation, not a confirmed compromise.
               </p>
@@ -428,9 +433,9 @@ export default function HomePage() {
               <h2>Where to focus, not just whether to look further.</h2>
               <p>
                 You&rsquo;re working inside a limited evaluation window, and most of what you need to decide
-                whether to go deeper is already sitting in public records and the page itself. Scan gives you that
-                read before you ask a seller for access, before you spend a day checking it by hand, and before you
-                commit budget to a full review.
+                whether to go deeper is already sitting in public records and the page itself. Scan runs the moment
+                you enter a domain, before you ask a seller for access, before you spend a day checking it by hand,
+                and before you commit budget to a full review.
               </p>
               <p>What comes back tells you where that review should focus, not just whether to run one.</p>
             </div>
@@ -444,8 +449,8 @@ export default function HomePage() {
             <p className="eyebrow">Access</p>
             <h2>Access is invite-only right now.</h2>
             <p>
-              Veritech Scan is in early access. If you already have an invitation, sign in below. If you
-              don&rsquo;t and want one, reach out and we&rsquo;ll get you set up.
+              Veritech Scan is in early access. If you already have an invitation, sign in below and run your first
+              analysis. If you don&rsquo;t and want one, reach out and we&rsquo;ll get you set up.
             </p>
             <div className="cta-row">
               <Link href="/login" className="btn-primary">

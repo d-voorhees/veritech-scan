@@ -1,9 +1,9 @@
 name: Deploy
 
 # Pushes to main run the full test suite, then deploy to Fly.io only if it
-# passes. Migrations are deliberately NOT run here — see README.md's
-# "Migrations" section. After a deploy that changes the schema, run
-# `make fly-migrate` by hand.
+# passes, then run `./scripts/migrate-fly.sh` (alembic upgrade head, via a
+# one-off Fly Machine using the image just deployed) — see README.md's
+# "Migrations" section.
 
 on:
   push:
@@ -93,3 +93,8 @@ jobs:
         run: flyctl deploy --remote-only --app veritech-scan
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: Run database migrations
+        run: ./scripts/migrate-fly.sh
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          FLY_APP_NAME: veritech-scan

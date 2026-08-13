@@ -1,9 +1,10 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_current_user_optional
 from app.core.rate_limit import RateLimitExceeded, enforce_scan_creation_rate_limit
 from app.core.url_safety import UnsafeTargetError
 from app.db import get_db
@@ -149,8 +150,13 @@ def get_scan_report(
 
 @router.get("/{scan_id}/export/html")
 def export_scan_html(
-    scan_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+    scan_id: uuid.UUID, db: Session = Depends(get_db), user: User | None = Depends(get_current_user_optional)
 ) -> Response:
+    # This link is opened directly in the browser (not fetched from the SPA),
+    # so an unauthenticated hit needs a real redirect to the login page
+    # instead of a raw {"detail": "Not authenticated"} JSON body.
+    if user is None:
+        return RedirectResponse(url="/login?session=expired")
     scan = _get_owned_scan(db, scan_id, user)
     report = build_report(db, scan)
     html = render_report_html(report)

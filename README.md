@@ -197,10 +197,15 @@ make migrate                 # alembic upgrade head, using apps/api/.venv (local
 make fly-migrate              # same, against production, via a one-off Fly Machine
 ```
 
-Migrations are **never** run automatically at Machine startup — this is a
-deliberate choice so a deploy never silently applies schema changes without
-an operator seeing it happen. Always run `make fly-migrate` after a deploy
-that changes the schema.
+Migrations are **never** run automatically at Machine startup — the web/API
+and scan-runner Machines never run `alembic upgrade head` themselves. In
+production, migrations instead run automatically as the last step of the
+`Deploy` GitHub Actions workflow (`.github/workflows/deploy.yml`): every push
+to `main` that passes the test suite runs `flyctl deploy`, then
+`./scripts/migrate-fly.sh` against the image just deployed. Run
+`make fly-migrate` by hand only if you need to apply a migration outside
+that pipeline (e.g. a deploy triggered via `workflow_dispatch` before a
+schema change has merged, or a manual `make fly-deploy` from your machine).
 
 To generate a new migration after changing SQLAlchemy models:
 
