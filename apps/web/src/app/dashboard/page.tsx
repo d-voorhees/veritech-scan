@@ -25,7 +25,7 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <div className="eyebrow text-primary">Overview</div>
-          <h1 className="mt-1 font-serif text-2xl italic tracking-tight text-foreground">Dashboard</h1>
+          <h1 className="mt-1 text-3xl font-bold tracking-tight text-foreground">Dashboard</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             {productConfig.productName} pre-screens are bounded, evidence-linked, and never conclusive on their
             own — use them to prioritize deeper diligence.
@@ -39,24 +39,22 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      <div className="mt-8 grid grid-cols-1 border-t border-foreground sm:grid-cols-3">
-        <div className="flex items-baseline justify-between gap-4 border-b border-r-0 border-border px-1 py-4 sm:border-r">
-          <span className="text-sm text-muted-foreground">Total scans</span>
-          <span className="font-mono text-xl font-medium text-foreground">{scans?.length ?? "—"}</span>
+      <div className="mt-8 grid grid-cols-1 divide-y divide-border border border-border bg-surface shadow-sm sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+        <div className="flex flex-col gap-1 px-5 py-4">
+          <span className="eyebrow mb-0 text-muted-foreground">Total scans</span>
+          <span className="font-mono text-3xl font-bold text-foreground">{scans?.length ?? "—"}</span>
         </div>
-        <div className="flex items-baseline justify-between gap-4 border-b border-r-0 border-border px-1 py-4 sm:border-r sm:px-6">
-          <span className="text-sm text-muted-foreground">In progress</span>
-          <span className="font-mono text-xl font-medium text-foreground">{inProgress.length}</span>
+        <div className="flex flex-col gap-1 px-5 py-4">
+          <span className="eyebrow mb-0 text-muted-foreground">In progress</span>
+          <span className="font-mono text-3xl font-bold text-foreground">{inProgress.length}</span>
         </div>
-        <div className="flex items-baseline justify-between gap-4 border-b border-border px-1 py-4 sm:px-6">
-          <span className="text-sm text-muted-foreground">Product</span>
-          <span className="text-right font-mono text-sm font-medium text-foreground">
-            {productConfig.productName}
-          </span>
+        <div className="flex flex-col gap-1 px-5 py-4">
+          <span className="eyebrow mb-0 text-muted-foreground">Product</span>
+          <span className="font-mono text-lg font-bold text-foreground">{productConfig.productName}</span>
         </div>
       </div>
 
-      <Card className="mt-8">
+      <Card className="mt-8 border-t-2 border-t-primary">
         <CardHeader>
           <CardTitle>Recent scans</CardTitle>
           <CardDescription>Your most recently created scans.</CardDescription>

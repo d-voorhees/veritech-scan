@@ -23,14 +23,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-border bg-background">
+      <header className="border-b-2 border-primary bg-background">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
           <div className="flex items-center gap-8">
             <div>
-              <div className="font-serif text-base italic tracking-tight text-foreground">
-                {productConfig.productName}
-              </div>
-              <div className="eyebrow text-primary">{productConfig.parentBrand}</div>
+              <div className="text-base font-bold tracking-tight text-foreground">{productConfig.productName}</div>
+              <div className="eyebrow mb-0 text-primary">{productConfig.parentBrand}</div>
             </div>
             <nav className="flex items-center gap-6">
               {NAV_ITEMS.map((item) => {

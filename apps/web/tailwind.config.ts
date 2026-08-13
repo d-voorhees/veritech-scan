@@ -6,11 +6,12 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        border: "#E5E5E0",
+        border: "#C9C9BD",
         background: "#FAFAF7",
+        surface: "#FFFFFF",
         foreground: "#0A0A0A",
         muted: "#EFEBE0",
-        "muted-foreground": "#5B5B5B",
+        "muted-foreground": "#44443C",
         primary: "#1F3A5F",
         "primary-foreground": "#FAFAF7",
         "primary-hover": "#132845",
@@ -23,7 +24,6 @@ const config: Config = {
       fontFamily: {
         sans: ["var(--font-sans)", "system-ui", "sans-serif"],
         mono: ["var(--font-mono)", "monospace"],
-        serif: ["var(--font-serif)", "serif"],
       },
     },
   },

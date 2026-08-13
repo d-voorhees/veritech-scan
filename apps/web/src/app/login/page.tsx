@@ -10,29 +10,36 @@ import { ApiError } from "@/lib/api";
 import { productConfig } from "@/lib/config";
 import { useLogin } from "@/lib/use-auth";
 
-function LoginForm() {
+function SessionExpiredBanner() {
+  const searchParams = useSearchParams();
+  if (searchParams.get("session") !== "expired") return null;
+
+  return (
+    <div className="mb-4 border border-border bg-muted px-3 py-2 text-sm text-foreground">
+      You have been logged out.
+    </div>
+  );
+}
+
+export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const login = useLogin();
-  const searchParams = useSearchParams();
-  const sessionExpired = searchParams.get("session") === "expired";
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <Card className="w-full max-w-sm border-t-2 border-t-primary">
         <CardHeader className="gap-2 pb-5 pt-6">
           <div className="eyebrow text-primary">{productConfig.parentBrand}</div>
-          <CardTitle className="font-serif text-2xl font-normal italic tracking-tight text-foreground">
+          <CardTitle className="text-xl font-bold tracking-tight text-foreground">
             {productConfig.productName}
           </CardTitle>
           <CardDescription>Invite-only access. Sign in with your account.</CardDescription>
         </CardHeader>
         <CardContent>
-          {sessionExpired && (
-            <div className="mb-4 border border-border bg-muted px-3 py-2 text-sm text-foreground">
-              You have been logged out.
-            </div>
-          )}
+          <Suspense fallback={null}>
+            <SessionExpiredBanner />
+          </Suspense>
           <form
             className="flex flex-col gap-4"
             onSubmit={(e) => {
@@ -74,13 +81,5 @@ function LoginForm() {
         </CardContent>
       </Card>
     </div>
-  );
-}
-
-export default function LoginPage() {
-  return (
-    <Suspense fallback={null}>
-      <LoginForm />
-    </Suspense>
   );
 }

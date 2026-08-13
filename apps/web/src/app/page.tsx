@@ -79,20 +79,6 @@ export default function HomePage() {
           max-width: 620px;
         }
 
-        .landing .differentiator {
-          border-top: 1px solid var(--rule);
-          padding-top: 24px;
-          max-width: 620px;
-        }
-
-        .landing .differentiator .eyebrow { color: var(--accent); }
-
-        .landing .differentiator p {
-          font-size: 1.0625rem;
-          color: var(--muted);
-          margin: 0 0 32px 0;
-        }
-
         .landing .cta-row {
           display: flex;
           align-items: center;
@@ -128,13 +114,16 @@ export default function HomePage() {
           color: var(--ink);
           text-decoration: none;
           border-bottom: 1px solid var(--ink);
-          padding-bottom: 3px;
+          padding: 14px 0;
           font-size: 15px;
           font-weight: 500;
+          transition: gap 0.15s ease;
         }
 
+        .landing .btn-secondary:hover { gap: 12px; }
+
         .landing .btn-secondary .arrow { transition: transform 0.15s ease; display: inline-block; }
-        .landing .btn-secondary:hover .arrow { transform: translateX(3px); }
+        .landing .btn-secondary:hover .arrow { transform: translateX(2px); }
 
         @media (prefers-reduced-motion: reduce) {
           .landing .btn-primary, .landing .btn-secondary, .landing .arrow { transition: none; }
@@ -281,15 +270,6 @@ export default function HomePage() {
               register in minutes. No analyst sits between you and the result, and every finding links back to the
               exact evidence behind it.
             </p>
-
-            <div className="differentiator">
-              <p className="eyebrow">Why it&rsquo;s different</p>
-              <p>
-                Twelve deterministic rules do the work, not a person and not a model guessing at what it found.
-                Nothing here is presented as more certain than the evidence supports, and nothing waits on
-                anyone&rsquo;s calendar.
-              </p>
-            </div>
 
             <div className="cta-row">
               <Link href="/login" className="btn-primary">
