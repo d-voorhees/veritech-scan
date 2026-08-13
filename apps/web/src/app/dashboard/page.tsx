@@ -54,7 +54,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <Card className="mt-8 border-t-2 border-t-primary">
+      <Card className="mt-8">
         <CardHeader>
           <CardTitle>Recent scans</CardTitle>
           <CardDescription>Your most recently created scans.</CardDescription>

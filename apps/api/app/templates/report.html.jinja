@@ -30,8 +30,14 @@
   .badge-info { background: #e6e9ec; color: #444c56; }
   .badge-status { background: #eef2f6; color: #33404d; }
   table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; }
-  th, td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid #e5e8ec; font-size: 0.85rem; vertical-align: top; }
+  th, td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid #e5e8ec; font-size: 0.85rem; vertical-align: top; word-break: break-word; overflow-wrap: anywhere; }
   th { font-size: 0.72rem; text-transform: uppercase; color: #5b6472; letter-spacing: 0.04em; }
+  .crawl-table { table-layout: fixed; }
+  .crawl-table col.col-url { width: 32%; }
+  .crawl-table col.col-status { width: 10%; }
+  .crawl-table col.col-title { width: 28%; }
+  .crawl-table col.col-canonical { width: 15%; }
+  .crawl-table col.col-h1 { width: 15%; }
   .finding { border: 1px solid #d9dde3; border-radius: 8px; padding: 0.9rem 1rem; margin-bottom: 0.75rem; page-break-inside: avoid; }
   .finding-title-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
   .finding-title { font-weight: 600; font-size: 0.95rem; }
@@ -52,6 +58,10 @@
 </head>
 <body>
 
+{% macro dt(value) -%}
+{% if value %}<span class="dt" data-utc="{{ value.isoformat() }}">{{ value.strftime('%Y-%m-%d %H:%M UTC') }}</span>{% else %}—{% endif %}
+{%- endmacro %}
+
 <div class="print-actions"><button onclick="window.print()">Print / Save as PDF</button></div>
 
 <div class="eyebrow">{{ report.parent_brand }}</div>
@@ -62,10 +72,10 @@
   <div class="meta-item"><div class="label">Domain</div><div class="value">{{ report.domain }}</div></div>
   <div class="meta-item"><div class="label">Scan status</div><div class="value">{{ report.status }}</div></div>
   <div class="meta-item"><div class="label">Pages scanned</div><div class="value">{{ report.pages_scanned }} (max {{ report.max_pages }})</div></div>
-  <div class="meta-item"><div class="label">Authorization confirmed</div><div class="value">{{ report.authorization_confirmed_at }}</div></div>
-  <div class="meta-item"><div class="label">Started</div><div class="value">{{ report.started_at or "—" }}</div></div>
-  <div class="meta-item"><div class="label">Completed</div><div class="value">{{ report.completed_at or "—" }}</div></div>
-  <div class="meta-item"><div class="label">Report generated</div><div class="value">{{ report.generated_at }}</div></div>
+  <div class="meta-item"><div class="label">Authorization confirmed</div><div class="value">{{ dt(report.authorization_confirmed_at) }}</div></div>
+  <div class="meta-item"><div class="label">Started</div><div class="value">{{ dt(report.started_at) }}</div></div>
+  <div class="meta-item"><div class="label">Completed</div><div class="value">{{ dt(report.completed_at) }}</div></div>
+  <div class="meta-item"><div class="label">Report generated</div><div class="value">{{ dt(report.generated_at) }}</div></div>
   <div class="meta-item"><div class="label">Acquisition notes</div><div class="value">{{ report.notes or "—" }}</div></div>
 </div>
 
@@ -102,7 +112,7 @@
       <div class="evidence-item">
         <div><strong>{{ e.category }}</strong> — {{ e.source_type }} — confidence: {{ e.confidence }}</div>
         <div>{{ e.human_readable_summary }}</div>
-        <div style="color:#5b6472; font-size:0.72rem;">Source: {{ e.source_url_or_identifier }} · captured {{ e.captured_at }}</div>
+        <div style="color:#5b6472; font-size:0.72rem;">Source: {{ e.source_url_or_identifier }} · captured {{ dt(e.captured_at) }}</div>
       </div>
       {% endfor %}
     </details>
@@ -149,7 +159,10 @@
 
 <h2>Crawl and indexability</h2>
 <p>{{ report.crawl_indexability.pages_scanned }} pages scanned; {{ report.crawl_indexability.error_page_count }} returned a 4xx/5xx status.</p>
-<table>
+<table class="crawl-table">
+  <colgroup>
+    <col class="col-url"><col class="col-status"><col class="col-title"><col class="col-canonical"><col class="col-h1">
+  </colgroup>
   <thead><tr><th>URL</th><th>Status</th><th>Title</th><th>Canonical</th><th>H1 count</th></tr></thead>
   <tbody>
   {% for p in report.crawl_indexability.pages %}
@@ -160,14 +173,17 @@
 
 <h2>Technology and dependencies</h2>
 {% if report.technology.technologies %}
+{% for category, techs in report.technology.technologies|groupby('category') %}
+<h3 style="font-size:0.85rem; text-transform:uppercase; letter-spacing:0.04em; color:#5b6472; margin:1.25rem 0 0.4rem;">{{ category|replace("_", " ") }}</h3>
 <table>
-  <thead><tr><th>Technology</th><th>Category</th><th>Detection method</th><th>Confidence</th></tr></thead>
+  <thead><tr><th>Technology</th><th>Detection method</th><th>Confidence</th></tr></thead>
   <tbody>
-  {% for t in report.technology.technologies %}
-    <tr><td>{{ t.technology_name }}</td><td>{{ t.category }}</td><td>{{ t.detection_method }}</td><td>{{ t.confidence }}</td></tr>
+  {% for t in techs %}
+    <tr><td>{{ t.technology_name }}</td><td>{{ t.detection_method }}</td><td>{{ t.confidence }}</td></tr>
   {% endfor %}
   </tbody>
 </table>
+{% endfor %}
 {% else %}
 <p class="empty-note">No technologies were positively identified by local rules-based detection.</p>
 {% endif %}
@@ -202,8 +218,17 @@
   {{ report.product_name }} is a technical pre-screen produced by {{ report.parent_brand }}. It converts
   bounded public technical evidence into a prioritized risk register and recommended next steps. It is not a
   vulnerability scan, penetration test, or legal/financial audit, and findings described as "hardening
-  opportunities" are not confirmed vulnerabilities. Generated {{ report.generated_at }}.
+  opportunities" are not confirmed vulnerabilities. Generated {{ dt(report.generated_at) }}.
 </div>
+
+<script>
+  document.querySelectorAll(".dt").forEach(function (el) {
+    var parsed = new Date(el.dataset.utc);
+    if (!isNaN(parsed.getTime())) {
+      el.textContent = parsed.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+    }
+  });
+</script>
 
 </body>
 </html>

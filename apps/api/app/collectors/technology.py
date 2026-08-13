@@ -16,7 +16,7 @@ from app.models.observation import TechnologyObservation
 # detector(html, headers_lower) -> matched detection-method string, or None.
 
 
-def _html_contains(html: str, *needles: str):
+def _html_contains(*needles: str):
     def _detector(_html: str, _headers: dict) -> str | None:
         for needle in needles:
             if needle.lower() in _html.lower():
@@ -82,10 +82,27 @@ DETECTION_RULES = [
         _regex(r'name=["\']generator["\']\s+content=["\']Webflow', "meta generator tag references Webflow"),
     )),
     ("Wix", "website_builder", "high", _any_of(
-        _html_contains("wixstatic.com", "wix.com"),
+        _html_contains("wixstatic.com", "static.parastorage.com"),
         _regex(r'name=["\']generator["\']\s+content=["\']Wix', "meta generator tag references Wix"),
     )),
-    ("Squarespace", "website_builder", "high", _html_contains("squarespace.com", "static1.squarespace.com")),
+    ("Squarespace", "website_builder", "high", _html_contains("static1.squarespace.com", "squarespace-cdn.com")),
+    ("Drupal", "cms", "high", _any_of(
+        _html_contains("/sites/default/files", "Drupal.settings"),
+        _regex(r'name=["\']generator["\']\s+content=["\']Drupal', "meta generator tag references Drupal"),
+    )),
+    ("Ghost", "cms", "high", _any_of(
+        _html_contains("/ghost/api/", "ghost.io/edition"),
+        _regex(r'name=["\']generator["\']\s+content=["\']Ghost', "meta generator tag references Ghost"),
+    )),
+    ("Astro", "static_site_framework", "high", _any_of(
+        _regex(r"astro-island|data-astro-cid", "Astro runtime marker (astro-island/data-astro-cid) found"),
+        _regex(r'name=["\']generator["\']\s+content=["\']Astro', "meta generator tag references Astro"),
+    )),
+    ("Sanity", "headless_cms", "high", _html_contains("cdn.sanity.io")),
+    ("Contentful", "headless_cms", "high", _html_contains("images.ctfassets.net", "cdn.contentful.com")),
+    ("WooCommerce", "ecommerce_platform", "high", _html_contains("woocommerce", "wc-ajax")),
+    ("BigCommerce", "ecommerce_platform", "high", _html_contains("cdn11.bigcommerce.com", "bigcommerce.com/s-")),
+    ("Magento", "ecommerce_platform", "high", _html_contains("/skin/frontend/", "Mage.Cookies")),
     ("Next.js", "frontend_framework", "high", _html_contains("/_next/static", "__NEXT_DATA__")),
     ("React", "frontend_framework", "medium", _html_contains("data-reactroot", "react-dom")),
     ("Vue", "frontend_framework", "medium", _regex(r"data-v-[0-9a-f]{6,}|__vue__", "Vue-style scoped attribute or runtime marker found")),
@@ -97,9 +114,41 @@ DETECTION_RULES = [
         _header_present("cf-ray"),
     )),
     ("Stripe", "payment", "high", _html_contains("js.stripe.com")),
-    ("HubSpot", "marketing", "high", _html_contains("hs-scripts.com", "hubspot")),
+    ("HubSpot", "marketing", "high", _html_contains(
+        "hs-scripts.com", "js.hubspot.com", "hsforms.net", "hs-analytics.net", "_hsq.push"
+    )),
     ("Intercom", "customer_support_chat", "high", _html_contains("widget.intercom.io", "Intercom(")),
     ("Segment", "analytics", "medium", _html_contains("cdn.segment.com")),
+    ("Meta Pixel", "analytics", "high", _html_contains("connect.facebook.net", "fbevents.js", "fbq(")),
+    ("Microsoft Clarity", "analytics", "high", _html_contains("clarity.ms/tag")),
+    ("Hotjar", "analytics", "high", _html_contains("static.hotjar.com", "hotjar.com/c/hotjar-")),
+    ("LinkedIn Insight Tag", "advertising", "high", _html_contains("snap.licdn.com/li.lms-analytics")),
+    ("TikTok Pixel", "advertising", "high", _html_contains("analytics.tiktok.com/i18n/pixel")),
+    ("Google Ads Conversion Tracking", "advertising", "medium", _html_contains("googleadservices.com", "/pagead/conversion")),
+    ("Mailchimp", "email_marketing", "high", _html_contains("list-manage.com", "chimpstatic.com")),
+    ("Klaviyo", "email_marketing", "high", _html_contains("static.klaviyo.com", "_learnq.push")),
+    ("Drift", "customer_support_chat", "high", _html_contains("js.driftt.com", "drift.com/embeds")),
+    ("Zendesk", "customer_support_chat", "high", _html_contains("static.zdassets.com", "zendesk.com/embeddable")),
+    ("PayPal", "payment", "high", _html_contains("paypal.com/sdk/js", "paypalobjects.com")),
+    ("Vercel", "hosting_paas", "medium", _header_present("x-vercel-id")),
+    ("Netlify", "hosting_paas", "medium", _any_of(_header_present("x-nf-request-id"), _header_contains("server", "netlify"))),
+    ("Amazon CloudFront", "cdn_security", "medium", _any_of(_header_present("x-amz-cf-id"), _header_contains("via", "cloudfront"))),
+    ("Fastly", "cdn_security", "medium", _header_present("x-fastly-request-id")),
+    ("Google Fonts", "fonts", "medium", _html_contains("fonts.googleapis.com", "fonts.gstatic.com")),
+    ("Adobe Fonts", "fonts", "medium", _html_contains("use.typekit.net")),
+    ("Font Awesome", "fonts", "low", _html_contains("fontawesome.com", "font-awesome")),
+    ("jQuery", "javascript_library", "medium", _regex(r"jquery(?:-|\.min|\.slim)?\.js", "jQuery script filename pattern found")),
+    ("Bootstrap", "javascript_library", "low", _html_contains("bootstrap.min.css", "bootstrap.min.js", "bootstrap.bundle.js")),
+    ("OneTrust", "consent_management", "high", _html_contains("cdn.cookielaw.org", "onetrust.com")),
+    ("Cookiebot", "consent_management", "high", _html_contains("consent.cookiebot.com")),
+    ("Typeform", "forms", "high", _html_contains("embed.typeform.com")),
+    ("Calendly", "scheduling", "high", _html_contains("calendly.com/assets", "Calendly.initInlineWidget")),
+    ("Algolia", "search", "medium", _html_contains("algolia.net", "algolianet.com")),
+    ("reCAPTCHA", "captcha", "high", _html_contains("google.com/recaptcha", "grecaptcha")),
+    ("hCaptcha", "captcha", "high", _html_contains("hcaptcha.com")),
+    ("YouTube embed", "video", "medium", _html_contains("youtube.com/embed", "youtube-nocookie.com")),
+    ("Vimeo embed", "video", "medium", _html_contains("player.vimeo.com")),
+    ("Google Maps", "maps", "medium", _html_contains("maps.googleapis.com", "maps.google.com/maps")),
 ]
 
 

@@ -341,20 +341,42 @@ function CrawlSection({ crawl }: { crawl: Record<string, unknown> }) {
 
 function TechnologySection({ technology }: { technology: { technologies: Array<Record<string, unknown>> } }) {
   const items = technology.technologies ?? [];
+
+  const byCategory = new Map<string, Array<Record<string, unknown>>>();
+  for (const t of items) {
+    const category = String(t.category);
+    if (!byCategory.has(category)) byCategory.set(category, []);
+    byCategory.get(category)!.push(t);
+  }
+  const categories = [...byCategory.keys()].sort();
+
   return (
     <Card className="mt-6">
       <CardHeader>
         <CardTitle>Technology and dependencies</CardTitle>
+        {items.length > 0 && (
+          <CardDescription>
+            {items.length} {items.length === 1 ? "technology" : "technologies"} identified across {categories.length}{" "}
+            {categories.length === 1 ? "category" : "categories"}.
+          </CardDescription>
+        )}
       </CardHeader>
       <CardContent>
         {items.length === 0 ? (
           <p className="text-sm text-muted-foreground">No technologies were positively identified.</p>
         ) : (
-          <div className="flex flex-wrap gap-2">
-            {items.map((t, i) => (
-              <Badge key={i} variant="outline">
-                {String(t.technology_name)} · {String(t.category)}
-              </Badge>
+          <div className="flex flex-col gap-4">
+            {categories.map((category) => (
+              <div key={category}>
+                <div className="eyebrow mb-2 text-muted-foreground">{titleCase(category)}</div>
+                <div className="flex flex-wrap gap-2">
+                  {byCategory.get(category)!.map((t, i) => (
+                    <Badge key={i} variant="outline" title={String(t.detection_method)}>
+                      {String(t.technology_name)}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         )}

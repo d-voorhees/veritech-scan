@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FileSearch, LayoutDashboard, ListChecks, LogOut, Settings } from "lucide-react";
+import { FileSearch, LayoutDashboard, ListChecks, LogOut, Settings, User } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { productConfig } from "@/lib/config";
@@ -26,11 +26,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <header className="border-b-2 border-primary bg-background">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
           <div className="flex items-center gap-8">
-            <div>
+            <Link href="/dashboard">
               <div className="text-base font-bold tracking-tight text-foreground">{productConfig.productName}</div>
               <div className="eyebrow mb-0 text-primary">{productConfig.parentBrand}</div>
-            </div>
-            <nav className="flex items-center gap-6">
+            </Link>
+            <nav className="hidden items-center gap-6 md:flex">
               {NAV_ITEMS.map((item) => {
                 const active = pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href));
                 const Icon = item.icon;
@@ -53,7 +53,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </nav>
           </div>
           <div className="flex items-center gap-3">
-            {me && <span className="text-sm text-muted-foreground">{me.email}</span>}
+            <Link
+              href="/settings"
+              title={me?.email}
+              aria-label="Profile"
+              className="flex h-8 w-8 items-center justify-center border border-border text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <User className="h-4 w-4" />
+            </Link>
             <Button variant="ghost" size="sm" onClick={() => logout.mutate()}>
               <LogOut className="h-3.5 w-3.5" />
               Sign out
