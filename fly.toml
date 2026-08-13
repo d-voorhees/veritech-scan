@@ -30,12 +30,14 @@ primary_region = "iad"
   force_https = true
   processes = ["app"]
 
-  # Zero always-on compute for the web/API role: Fly stops the Machine when
-  # it's had no traffic for a while, and the proxy auto-starts it again on
-  # the next incoming request.
-  auto_stop_machines = "stop"
+  # Always-on: cold starts on this Machine were ~13-18s regardless of VM
+  # size, image size/layer count, or region (iad vs dfw) — see the
+  # 2026-08-13 investigation in git history / CHANGELOG. That points to a
+  # fixed Fly platform boot cost outside our control, so autostop/autostart
+  # traded a small always-on compute cost for eliminating the wait instead.
+  auto_stop_machines = "off"
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
 
   [[http_service.checks]]
     grace_period = "10s"
@@ -45,10 +47,11 @@ primary_region = "iad"
     path = "/health"
 
 [[vm]]
-  # Bumped from shared-cpu-1x/256mb: on cold start, entrypoint.sh launches
-  # Next.js (Node) and FastAPI (Python/Uvicorn) at the same time, and both
-  # were serializing on one weak shared vCPU + thin memory budget instead
-  # of booting in parallel — that contention was most of the ~18s cold
-  # start, not Fly's Machine-boot time (which is ~1.3s).
-  size = "shared-cpu-2x"
-  memory = "512mb"
+  # Back at the smallest tier: the shared-cpu-2x/512mb bump tried earlier
+  # made no measurable difference to cold-start time (that turned out to
+  # be a fixed Fly platform cost, not CPU/memory contention — see the
+  # min_machines_running comment above), so there's no reason to pay for
+  # more than this while running always-on. Bump if steady-state memory
+  # pressure shows up under real traffic.
+  size = "shared-cpu-1x"
+  memory = "256mb"
