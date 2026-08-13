@@ -106,6 +106,7 @@ DETECTION_RULES = [
             "woocommerce_params",
             "woocommerce-page",
             "wc-ajax=",
+            "wc-logs",
         ),
         _regex(r'class=["\'][^"\']*\bwoocommerce\b[^"\']*["\']', "HTML element has a woocommerce class"),
     )),
@@ -115,7 +116,9 @@ DETECTION_RULES = [
     ("React", "frontend_framework", "medium", _html_contains("data-reactroot", "react-dom")),
     ("Vue", "frontend_framework", "medium", _regex(r"data-v-[0-9a-f]{6,}|__vue__", "Vue-style scoped attribute or runtime marker found")),
     ("Angular", "frontend_framework", "high", _regex(r"\bng-version=", "ng-version attribute found")),
-    ("Google Analytics", "analytics", "high", _html_contains("google-analytics.com", "gtag(", "ga('create'")),
+    ("Google Analytics", "analytics", "high", _html_contains(
+        "google-analytics.com", "gtag(", "ga('create'", "googletagmanager.com/gtag/js"
+    )),
     ("Google Tag Manager", "tag_manager", "high", _html_contains("googletagmanager.com/gtm.js")),
     ("Cloudflare", "cdn_security", "medium", _any_of(
         _header_contains("server", "cloudflare"),
@@ -160,14 +163,59 @@ DETECTION_RULES = [
     ("Google Maps", "maps", "medium", _html_contains("maps.googleapis.com", "maps.google.com/maps")),
 ]
 
+# WordPress asset URLs commonly carry a `?ver=X.Y.Z` cache-busting query
+# string that discloses the exact plugin/theme version with no
+# authentication required — this is the version data a future CVE
+# cross-reference (see docs/rules-engine.md) would key off of.
+_WP_ASSET_VERSION_RE = re.compile(
+    r"wp-content/(plugins|themes)/([a-zA-Z0-9_\-]+)/[^\s\"'<>]*?\?[^\s\"'<>]*?\bver=([0-9][0-9a-zA-Z.\-]*)",
+    re.IGNORECASE,
+)
 
-def run_technology_detection(db, scan_request_id: uuid.UUID, html_text: str | None, headers: dict) -> dict:
-    html_text = html_text or ""
+
+def _detect_wp_asset_versions(html: str) -> list[dict]:
+    seen: set[tuple[str, str]] = set()
+    results: list[dict] = []
+    for kind, name, version in _WP_ASSET_VERSION_RE.findall(html or ""):
+        key = (name.lower(), version)
+        if key in seen:
+            continue
+        seen.add(key)
+        results.append(
+            {
+                "name": name,
+                "type": "plugin" if kind.lower() == "plugins" else "theme",
+                "version": version,
+            }
+        )
+    return results
+
+
+def run_technology_detection(
+    db,
+    scan_request_id: uuid.UUID,
+    html_text: str | None,
+    headers: dict,
+    rendered_html: str | None = None,
+    robots_body_excerpt: str | None = None,
+) -> dict:
+    # Three sources are combined: the raw pre-JS httpx response, the
+    # browser-rendered DOM, and a robots.txt excerpt. Relying on the raw
+    # response alone misses anything a real browser reveals that a bare
+    # HTTP GET doesn't — script tags deferred/rewritten by optimizers
+    # (e.g. Cloudflare Rocket Loader), JS-gated bot-protection challenge
+    # pages, or markup injected client-side — and robots.txt often names
+    # platform-specific paths (e.g. "Disallow: /wp-admin/") even when a
+    # WAF or CDN strips every other marker from the page itself. Detection
+    # is substring/regex matching, so combining sources only widens what
+    # can be found, never causes duplicates (each rule fires at most once
+    # regardless of how many needles match).
+    combined_html = "\n".join(t for t in (html_text, rendered_html, robots_body_excerpt) if t)
     headers_lower = {k.lower(): v for k, v in (headers or {}).items()}
 
     detected: list[dict] = []
     for name, category, confidence, detector in DETECTION_RULES:
-        method = detector(html_text, headers_lower)
+        method = detector(combined_html, headers_lower)
         if not method:
             continue
 
@@ -197,5 +245,42 @@ def run_technology_detection(db, scan_request_id: uuid.UUID, html_text: str | No
         )
         detected.append({"technology_name": name, "category": category, "confidence": confidence})
 
+    wp_assets = _detect_wp_asset_versions(combined_html)
+    for asset in wp_assets:
+        label = f"{asset['name']} {asset['version']} ({asset['type']})"
+        method = f"Asset URL wp-content/{asset['type']}s/{asset['name']}/... contains ?ver={asset['version']}"
+        evidence = EvidenceItem(
+            scan_request_id=scan_request_id,
+            category="technology",
+            source_type="wp_asset_version",
+            source_url_or_identifier=label,
+            captured_at=datetime.now(timezone.utc),
+            confidence="high",
+            normalized_payload_json={
+                "technology_name": label,
+                "category": f"wordpress_{asset['type']}",
+                "detection_method": method,
+                "plugin_or_theme_name": asset["name"],
+                "plugin_or_theme_type": asset["type"],
+                "version": asset["version"],
+            },
+            human_readable_summary=f"Detected WordPress {asset['type']} \"{asset['name']}\" version {asset['version']} via: {method}.",
+            raw_response_reference=None,
+        )
+        db.add(evidence)
+        db.flush()
+
+        db.add(
+            TechnologyObservation(
+                scan_request_id=scan_request_id,
+                technology_name=label,
+                category=f"wordpress_{asset['type']}",
+                detection_method=method,
+                confidence="high",
+                evidence_item_id=evidence.id,
+            )
+        )
+        detected.append({"technology_name": label, "category": f"wordpress_{asset['type']}", "confidence": "high"})
+
     db.flush()
-    return {"detected": detected, "count": len(detected)}
+    return {"detected": detected, "count": len(detected), "wp_asset_versions": wp_assets}

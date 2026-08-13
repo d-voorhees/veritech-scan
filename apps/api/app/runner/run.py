@@ -196,12 +196,18 @@ def run_scan(scan_id: str, runner_machine_id: str | None = None) -> int:
 
             if time_remaining():
                 http_result = _run_job(
-                    db, scan, "http_checks", lambda: http_checks.run_http_checks(db, scan.id, target.canonical_url)
+                    db,
+                    scan,
+                    "http_checks",
+                    lambda: http_checks.run_http_checks(
+                        db, scan.id, target.canonical_url, hostname=target.hostname, resolved_ips=target.resolved_ips
+                    ),
                 )
             _touch_heartbeat(db, scan)
 
+            robots_result = None
             if time_remaining():
-                _run_job(
+                robots_result = _run_job(
                     db,
                     scan,
                     "robots_sitemap",
@@ -241,7 +247,12 @@ def run_scan(scan_id: str, runner_machine_id: str | None = None) -> int:
                     scan,
                     "technology_detection",
                     lambda: technology.run_technology_detection(
-                        db, scan.id, (http_result or {}).get("html_text"), (http_result or {}).get("headers", {})
+                        db,
+                        scan.id,
+                        (http_result or {}).get("html_text"),
+                        (http_result or {}).get("headers", {}),
+                        (browser_result or {}).get("rendered_html"),
+                        (robots_result or {}).get("robots_body_excerpt"),
                     ),
                 )
             _touch_heartbeat(db, scan)

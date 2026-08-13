@@ -14,9 +14,19 @@ import httpx
 
 from app.collectors.user_agent import USER_AGENT
 from app.config import get_settings
+from app.core.url_safety import UnsafeTargetError, revalidate_redirect_url
 from app.models.evidence import EvidenceItem
 
 SAMPLE_URL_LIMIT = 10
+
+# Known-path exposure probes. Each is a single GET, revalidated against the
+# SSRF boundary immediately before it is requested (same pattern the crawler
+# uses per-request) — not a vulnerability confirmation, just a presence
+# observation the rules engine interprets.
+EXPOSURE_PROBE_PATHS = {
+    "xmlrpc": "xmlrpc.php",
+    "wp_json": "wp-json/",
+}
 
 
 def _strip_ns(tag: str) -> str:
@@ -110,6 +120,10 @@ def run_robots_and_sitemap_checks(db, scan_request_id: uuid.UUID, canonical_url:
         status_code, robots_text, error = _fetch(client, robots_url)
         summary["robots_status_code"] = status_code
         summary["robots_retrieval_error"] = error
+        # Same bounded excerpt stored on the evidence item below, surfaced
+        # here too so technology_detection can pattern-match paths robots.txt
+        # reveals (e.g. "Disallow: /wp-admin/") without a second fetch.
+        summary["robots_body_excerpt"] = (robots_text or "")[:4000]
 
         declared_sitemaps: list[str] = []
         if robots_text:
@@ -216,5 +230,41 @@ def run_robots_and_sitemap_checks(db, scan_request_id: uuid.UUID, canonical_url:
         )
         db.add(sitemap_evidence)
         db.flush()
+
+        exposure_results: dict = {}
+        for key, path in EXPOSURE_PROBE_PATHS.items():
+            probe_url = urljoin(origin + "/", path)
+            try:
+                revalidate_redirect_url(probe_url)
+                resp = client.get(probe_url)
+                exposure_results[key] = {
+                    "url": probe_url,
+                    "status_code": resp.status_code,
+                    "body_excerpt": resp.text[:500] if resp.text else "",
+                }
+            except (UnsafeTargetError, httpx.HTTPError) as exc:
+                exposure_results[key] = {"url": probe_url, "status_code": None, "error": str(exc)}
+        summary["exposure_checks"] = exposure_results
+
+        exposure_evidence = EvidenceItem(
+            scan_request_id=scan_request_id,
+            category="exposure",
+            source_type="endpoint_probe",
+            source_url_or_identifier=", ".join(r["url"] for r in exposure_results.values()),
+            captured_at=datetime.now(timezone.utc),
+            confidence="high",
+            normalized_payload_json=exposure_results,
+            human_readable_summary=(
+                "Probed known platform-specific endpoints: "
+                + "; ".join(
+                    f"{key} -> {r.get('status_code', 'error')}" for key, r in exposure_results.items()
+                )
+                + ". Presence/absence only — not a vulnerability confirmation."
+            ),
+            raw_response_reference=None,
+        )
+        db.add(exposure_evidence)
+        db.flush()
+        summary["exposure_evidence_id"] = exposure_evidence.id
 
     return summary

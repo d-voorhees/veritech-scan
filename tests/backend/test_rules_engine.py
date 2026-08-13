@@ -2,12 +2,18 @@ from datetime import datetime, timezone
 
 from app.models.evidence import EvidenceItem
 from app.models.finding import Finding, FindingEvidence
-from app.models.observation import DNSObservation, HTTPObservation, PerformanceObservation, ThirdPartyDependency
+from app.models.observation import (
+    DNSObservation,
+    HTTPObservation,
+    PerformanceObservation,
+    TechnologyObservation,
+    ThirdPartyDependency,
+)
 from app.models.page import Page
 from app.rules.engine import run_rules_engine
 
 
-def _evidence(db, scan, category, source_type, summary="test evidence"):
+def _evidence(db, scan, category, source_type, summary="test evidence", payload=None):
     item = EvidenceItem(
         scan_request_id=scan.id,
         category=category,
@@ -15,12 +21,36 @@ def _evidence(db, scan, category, source_type, summary="test evidence"):
         source_url_or_identifier="https://example.com/",
         captured_at=datetime.now(timezone.utc),
         confidence="high",
-        normalized_payload_json={},
+        normalized_payload_json=payload if payload is not None else {},
         human_readable_summary=summary,
     )
     db.add(item)
     db.flush()
     return item
+
+
+def _accessibility_evidence(
+    db,
+    scan,
+    image_count=0,
+    images_missing_alt_count=0,
+    labelable_field_count=0,
+    fields_missing_labels_count=0,
+    overlay_widget_vendor=None,
+):
+    return _evidence(
+        db,
+        scan,
+        "accessibility",
+        "static_accessibility_scan",
+        payload={
+            "image_count": image_count,
+            "images_missing_alt_count": images_missing_alt_count,
+            "labelable_field_count": labelable_field_count,
+            "fields_missing_labels_count": fields_missing_labels_count,
+            "overlay_widget_vendor": overlay_widget_vendor,
+        },
+    )
 
 
 def test_missing_dmarc_and_spf_produce_findings(db, scan_request):
@@ -247,3 +277,512 @@ def test_rules_engine_is_idempotent_on_rerun(db, scan_request):
     findings = db.query(Finding).filter(Finding.scan_request_id == scan_request.id).all()
     assert len(findings) == len(second_ids)
     assert first_ids != second_ids  # old findings were cleared and recreated
+
+
+# --- Priority 1: scan coverage status -----------------------------------------
+
+
+def test_scan_blocked_fires_on_non_2xx_homepage_status(db, scan_request):
+    _evidence(db, scan_request, "http", "http_response")
+    db.add(
+        HTTPObservation(
+            scan_request_id=scan_request.id, url="https://example.com/", final_url="https://example.com/",
+            status_code=403, redirect_chain=[], headers={}, is_https=True,
+        )
+    )
+    db.commit()
+
+    run_rules_engine(db, scan_request)
+
+    finding = (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.category == "scan_coverage")
+        .first()
+    )
+    assert finding is not None
+    assert finding.severity == "high"
+    assert "blocked" in finding.title.lower()
+
+
+def test_scan_blocked_fires_on_challenge_page_signature_with_2xx_status(db, scan_request):
+    _evidence(
+        db, scan_request, "http", "http_response",
+        payload={"body_excerpt": "<html><head><title>Just a moment...</title></head></html>"},
+    )
+    db.add(
+        HTTPObservation(
+            scan_request_id=scan_request.id, url="https://example.com/", final_url="https://example.com/",
+            status_code=200, redirect_chain=[], headers={}, is_https=True,
+        )
+    )
+    db.commit()
+
+    run_rules_engine(db, scan_request)
+
+    finding = (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.category == "scan_coverage")
+        .first()
+    )
+    assert finding is not None
+    assert finding.severity == "high"
+
+
+def test_scan_blocked_does_not_fire_on_clean_200_response(db, scan_request):
+    # A shallow (0-page) crawl would independently trip scan_coverage_partial,
+    # which isn't what this test is isolating — give it a full crawl so only
+    # scan_blocked's own condition (status/content) is under test.
+    _evidence(db, scan_request, "http", "http_response", payload={"body_excerpt": "<html>Welcome</html>"})
+    db.add(
+        HTTPObservation(
+            scan_request_id=scan_request.id, url="https://example.com/", final_url="https://example.com/",
+            status_code=200, redirect_chain=[], headers={}, is_https=True,
+        )
+    )
+    for i in range(10):
+        db.add(Page(scan_request_id=scan_request.id, url=f"https://example.com/p{i}", status_code=200))
+    db.commit()
+
+    run_rules_engine(db, scan_request)
+
+    assert (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.category == "scan_coverage")
+        .first()
+        is None
+    )
+
+
+def test_scan_coverage_partial_fires_on_shallow_crawl(db, scan_request):
+    # scan_request fixture has max_pages=10; 2 crawled is well under half.
+    _evidence(db, scan_request, "http", "http_response")
+    _evidence(db, scan_request, "crawl", "bounded_crawl")
+    db.add(
+        HTTPObservation(
+            scan_request_id=scan_request.id, url="https://example.com/", final_url="https://example.com/",
+            status_code=200, redirect_chain=[], headers={}, is_https=True,
+        )
+    )
+    db.add(Page(scan_request_id=scan_request.id, url="https://example.com/", status_code=200))
+    db.add(Page(scan_request_id=scan_request.id, url="https://example.com/about", status_code=200))
+    db.commit()
+
+    run_rules_engine(db, scan_request)
+
+    finding = (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.category == "scan_coverage")
+        .first()
+    )
+    assert finding is not None
+    assert finding.severity == "medium"
+
+
+def test_scan_coverage_partial_does_not_fire_on_full_crawl_with_no_failed_tasks(db, scan_request):
+    _evidence(db, scan_request, "http", "http_response")
+    _evidence(db, scan_request, "crawl", "bounded_crawl")
+    db.add(
+        HTTPObservation(
+            scan_request_id=scan_request.id, url="https://example.com/", final_url="https://example.com/",
+            status_code=200, redirect_chain=[], headers={}, is_https=True,
+        )
+    )
+    for i in range(10):
+        db.add(Page(scan_request_id=scan_request.id, url=f"https://example.com/p{i}", status_code=200))
+    db.commit()
+
+    run_rules_engine(db, scan_request)
+
+    assert (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.category == "scan_coverage")
+        .first()
+        is None
+    )
+
+
+# --- Priority 2: crawl error rate (ratio + floor) -------------------------------
+
+
+def test_excessive_crawl_errors_fires_on_high_ratio_small_crawl(db, scan_request):
+    """The hallofframes.com scenario: 1 page crawled, that page 403s — a
+    100% failure rate that the old absolute-count-only rule (threshold: >5)
+    missed entirely."""
+    crawl_evidence = _evidence(db, scan_request, "crawl", "bounded_crawl")
+    db.add(Page(scan_request_id=scan_request.id, url="https://example.com/", status_code=403))
+    db.commit()
+
+    run_rules_engine(db, scan_request)
+
+    finding = (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.category == "site_reliability")
+        .first()
+    )
+    assert finding is not None
+    assert finding.rule_version == 2
+    assert finding.evidence_links[0].evidence_item_id == crawl_evidence.id
+
+
+def test_excessive_crawl_errors_does_not_fire_on_low_ratio_low_count(db, scan_request):
+    _evidence(db, scan_request, "crawl", "bounded_crawl")
+    db.add(Page(scan_request_id=scan_request.id, url="https://example.com/broken", status_code=404))
+    for i in range(9):
+        db.add(Page(scan_request_id=scan_request.id, url=f"https://example.com/p{i}", status_code=200))
+    db.commit()
+
+    run_rules_engine(db, scan_request)
+
+    assert (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.category == "site_reliability")
+        .first()
+        is None
+    )
+
+
+# --- Priority 3a: analytics detection -------------------------------------------
+
+
+def test_no_analytics_detected_fires_without_ga_gtm_or_meta_pixel(db, scan_request):
+    _evidence(db, scan_request, "crawl", "page_snapshot")
+    db.commit()
+
+    run_rules_engine(db, scan_request)
+
+    finding = (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.category == "analytics")
+        .first()
+    )
+    assert finding is not None
+    assert finding.severity == "medium"
+
+
+def test_no_analytics_detected_does_not_fire_when_google_analytics_present(db, scan_request):
+    _evidence(db, scan_request, "crawl", "page_snapshot")
+    db.add(
+        TechnologyObservation(
+            scan_request_id=scan_request.id, technology_name="Google Analytics", category="analytics",
+            detection_method="test", confidence="high",
+        )
+    )
+    db.commit()
+
+    run_rules_engine(db, scan_request)
+
+    assert (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.category == "analytics")
+        .first()
+        is None
+    )
+
+
+# --- Priority 4a: TLS certificate expiration ------------------------------------
+
+
+def test_tls_certificate_expiring_or_expired_fires_within_30_days(db, scan_request):
+    _evidence(
+        db, scan_request, "tls", "tls_certificate",
+        payload={"issuer": "Let's Encrypt", "not_after": "2026-01-01T00:00:00+00:00", "days_until_expiry": 10},
+    )
+    db.commit()
+
+    run_rules_engine(db, scan_request)
+
+    finding = (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.category == "security_posture")
+        .filter(Finding.title.like("TLS certificate%"))
+        .first()
+    )
+    assert finding is not None
+    assert finding.severity == "medium"
+
+
+def test_tls_certificate_does_not_fire_when_valid_for_months(db, scan_request):
+    _evidence(
+        db, scan_request, "tls", "tls_certificate",
+        payload={"issuer": "Let's Encrypt", "not_after": "2027-01-01T00:00:00+00:00", "days_until_expiry": 300},
+    )
+    db.commit()
+
+    run_rules_engine(db, scan_request)
+
+    assert (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.title.like("TLS certificate%"))
+        .first()
+        is None
+    )
+
+
+# --- Priority 4b: platform exposure (xmlrpc.php, wp-json) -----------------------
+
+
+def test_xmlrpc_php_exposed_fires_when_endpoint_responds_as_active(db, scan_request):
+    _evidence(
+        db, scan_request, "exposure", "endpoint_probe",
+        payload={
+            "xmlrpc": {
+                "url": "https://example.com/xmlrpc.php", "status_code": 405,
+                "body_excerpt": "XML-RPC server accepts POST requests only.",
+            },
+            "wp_json": {"url": "https://example.com/wp-json/", "status_code": 404, "body_excerpt": ""},
+        },
+    )
+    db.commit()
+
+    run_rules_engine(db, scan_request)
+
+    finding = (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.title.like("WordPress xmlrpc%"))
+        .first()
+    )
+    assert finding is not None
+    assert finding.severity == "low"
+
+
+def test_xmlrpc_php_exposed_does_not_fire_when_not_found(db, scan_request):
+    _evidence(
+        db, scan_request, "exposure", "endpoint_probe",
+        payload={
+            "xmlrpc": {"url": "https://example.com/xmlrpc.php", "status_code": 404, "body_excerpt": "Not Found"},
+            "wp_json": {"url": "https://example.com/wp-json/", "status_code": 404, "body_excerpt": ""},
+        },
+    )
+    db.commit()
+
+    run_rules_engine(db, scan_request)
+
+    assert (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.title.like("WordPress xmlrpc%"))
+        .first()
+        is None
+    )
+
+
+def test_wp_json_rest_api_exposed_fires_when_root_enumerable(db, scan_request):
+    _evidence(
+        db, scan_request, "exposure", "endpoint_probe",
+        payload={
+            "xmlrpc": {"url": "https://example.com/xmlrpc.php", "status_code": 404, "body_excerpt": ""},
+            "wp_json": {
+                "url": "https://example.com/wp-json/", "status_code": 200,
+                "body_excerpt": '{"name":"Example","namespaces":["wp/v2"]}',
+            },
+        },
+    )
+    db.commit()
+
+    run_rules_engine(db, scan_request)
+
+    finding = (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.title.like("WordPress REST API%"))
+        .first()
+    )
+    assert finding is not None
+    assert finding.severity == "info"
+
+
+def test_wp_json_rest_api_exposed_does_not_fire_when_not_found(db, scan_request):
+    _evidence(
+        db, scan_request, "exposure", "endpoint_probe",
+        payload={
+            "xmlrpc": {"url": "https://example.com/xmlrpc.php", "status_code": 404, "body_excerpt": ""},
+            "wp_json": {"url": "https://example.com/wp-json/", "status_code": 404, "body_excerpt": "Not Found"},
+        },
+    )
+    db.commit()
+
+    run_rules_engine(db, scan_request)
+
+    assert (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.title.like("WordPress REST API%"))
+        .first()
+        is None
+    )
+
+
+# --- Priority 4c: domain registration -------------------------------------------
+
+
+def test_domain_registration_expiring_soon_fires_within_60_days(db, scan_request):
+    _evidence(
+        db, scan_request, "domain_registration", "rdap_lookup",
+        payload={"registrar": "GoDaddy", "expiration_date": "2026-09-01T00:00:00Z", "days_until_expiration": 20},
+    )
+    db.commit()
+
+    run_rules_engine(db, scan_request)
+
+    finding = (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.category == "domain_registration")
+        .first()
+    )
+    assert finding is not None
+    assert finding.severity == "medium"
+
+
+def test_domain_registration_does_not_fire_when_far_from_expiring(db, scan_request):
+    _evidence(
+        db, scan_request, "domain_registration", "rdap_lookup",
+        payload={"registrar": "GoDaddy", "expiration_date": "2028-01-01T00:00:00Z", "days_until_expiration": 700},
+    )
+    db.commit()
+
+    run_rules_engine(db, scan_request)
+
+    assert (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.category == "domain_registration")
+        .first()
+        is None
+    )
+
+
+# --- Priority 4d: accessibility pass ---------------------------------------------
+
+
+def test_homepage_images_missing_alt_fires(db, scan_request):
+    _accessibility_evidence(db, scan_request, image_count=5, images_missing_alt_count=2)
+    db.commit()
+
+    run_rules_engine(db, scan_request)
+
+    finding = (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.title.like("%missing alt text%"))
+        .first()
+    )
+    assert finding is not None
+    assert finding.severity == "low"
+
+
+def test_homepage_images_missing_alt_does_not_fire_when_all_have_alt(db, scan_request):
+    _accessibility_evidence(db, scan_request, image_count=5, images_missing_alt_count=0)
+    db.commit()
+
+    run_rules_engine(db, scan_request)
+
+    assert (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.title.like("%missing alt text%"))
+        .first()
+        is None
+    )
+
+
+def test_homepage_form_inputs_missing_labels_fires(db, scan_request):
+    _accessibility_evidence(db, scan_request, labelable_field_count=3, fields_missing_labels_count=1)
+    db.commit()
+
+    run_rules_engine(db, scan_request)
+
+    finding = (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.title.like("%missing an associated label%"))
+        .first()
+    )
+    assert finding is not None
+    assert finding.severity == "low"
+
+
+def test_homepage_form_inputs_missing_labels_does_not_fire_when_all_labeled(db, scan_request):
+    _accessibility_evidence(db, scan_request, labelable_field_count=3, fields_missing_labels_count=0)
+    db.commit()
+
+    run_rules_engine(db, scan_request)
+
+    assert (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.title.like("%missing an associated label%"))
+        .first()
+        is None
+    )
+
+
+def test_accessibility_overlay_widget_detected_fires(db, scan_request):
+    _accessibility_evidence(db, scan_request, overlay_widget_vendor="UserWay")
+    db.commit()
+
+    run_rules_engine(db, scan_request)
+
+    finding = (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.title.like("Accessibility overlay widget%"))
+        .first()
+    )
+    assert finding is not None
+    assert finding.severity == "info"
+    assert "UserWay" in finding.title
+
+
+def test_accessibility_overlay_widget_detected_does_not_fire_when_absent(db, scan_request):
+    _accessibility_evidence(db, scan_request, overlay_widget_vendor=None)
+    db.commit()
+
+    run_rules_engine(db, scan_request)
+
+    assert (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.title.like("Accessibility overlay widget%"))
+        .first()
+        is None
+    )
+
+
+# --- Priority 4e: mixed content --------------------------------------------------
+
+
+def test_mixed_content_fires_on_https_page_with_http_subresource(db, scan_request):
+    db.add(
+        HTTPObservation(
+            scan_request_id=scan_request.id, url="https://example.com/", final_url="https://example.com/",
+            status_code=200, redirect_chain=[], headers={}, is_https=True,
+        )
+    )
+    _evidence(
+        db, scan_request, "browser_render", "playwright_render",
+        payload={"mixed_content_count": 1, "mixed_content_urls": ["http://example.com/tracker.js"]},
+    )
+    db.commit()
+
+    run_rules_engine(db, scan_request)
+
+    finding = (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.title.like("%plain-HTTP subresource%"))
+        .first()
+    )
+    assert finding is not None
+    assert finding.severity == "medium"
+
+
+def test_mixed_content_does_not_fire_when_none_observed(db, scan_request):
+    db.add(
+        HTTPObservation(
+            scan_request_id=scan_request.id, url="https://example.com/", final_url="https://example.com/",
+            status_code=200, redirect_chain=[], headers={}, is_https=True,
+        )
+    )
+    _evidence(
+        db, scan_request, "browser_render", "playwright_render",
+        payload={"mixed_content_count": 0, "mixed_content_urls": []},
+    )
+    db.commit()
+
+    run_rules_engine(db, scan_request)
+
+    assert (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.title.like("%plain-HTTP subresource%"))
+        .first()
+        is None
+    )

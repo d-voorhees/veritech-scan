@@ -62,7 +62,11 @@ See `docs/threat-model.md` for the full list of technical non-goals (full
 ## Architecture: web/API Machine vs. scan-runner Machines
 
 Veritech Scan runs as a single Fly.io app with **two Machine roles**, built
-from one image (root `Dockerfile`, role selected by `scripts/entrypoint.sh`):
+from one `Dockerfile` as two separate images — `web` (Chromium-free, kept
+small so cold starts stay fast) and `scan-runner` (adds Playwright/Chromium)
+— with the runtime role within each selected by `scripts/entrypoint.sh`. See
+the Dockerfile's top-of-file comment and `scripts/deploy-fly.sh` for how
+both get built and pushed.
 
 - **Web/API Machine** — Next.js + FastAPI. Serves the browser and the API.
   Configured in `fly.toml` with `auto_stop_machines = "stop"`,

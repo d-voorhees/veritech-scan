@@ -7,14 +7,18 @@ and skipped gracefully when unconfigured.
 """
 
 import abc
+import time
 import uuid
 from datetime import datetime, timezone
 
 import httpx
 
 from app.config import get_settings
+from app.logging_config import get_logger
 from app.models.evidence import EvidenceItem
 from app.models.observation import PerformanceObservation
+
+logger = get_logger(__name__)
 
 
 class PerformanceProvider(abc.ABC):
@@ -53,6 +57,15 @@ class GooglePageSpeedProvider(PerformanceProvider):
     # Lighthouse runs. Revisit once Google rolls it into this endpoint.
     CATEGORIES = ["PERFORMANCE", "ACCESSIBILITY", "BEST_PRACTICES", "SEO"]
 
+    # Google's own guidance and real-world experience both show individual
+    # runPagespeed calls can take 30-60+ seconds (more for a cold cache),
+    # so a short timeout here silently drops one strategy — most visibly
+    # desktop, whose analysis frequently runs longer than mobile's cached
+    # default. One retry absorbs transient timeouts/5xxs without doubling
+    # the worst case for every scan.
+    REQUEST_TIMEOUT_SECONDS = 90
+    MAX_ATTEMPTS = 2
+
     def collect(self, final_url: str, context: dict, strategy: str) -> dict:
         params = {
             "url": final_url,
@@ -60,15 +73,27 @@ class GooglePageSpeedProvider(PerformanceProvider):
             "strategy": strategy,
             "category": self.CATEGORIES,
         }
-        try:
-            with httpx.Client(timeout=30) as client:
-                resp = client.get(
-                    "https://www.googleapis.com/pagespeedonline/v5/runPagespeed", params=params
+        last_error: Exception | None = None
+        data = None
+        for attempt in range(1, self.MAX_ATTEMPTS + 1):
+            try:
+                with httpx.Client(timeout=self.REQUEST_TIMEOUT_SECONDS) as client:
+                    resp = client.get(
+                        "https://www.googleapis.com/pagespeedonline/v5/runPagespeed", params=params
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+                break
+            except httpx.HTTPError as exc:
+                last_error = exc
+                logger.warning(
+                    "pagespeed_request_failed", strategy=strategy, attempt=attempt, error=str(exc)
                 )
-                resp.raise_for_status()
-                data = resp.json()
-        except httpx.HTTPError as exc:
-            return {"provider": "google_pagespeed", "configured": True, "error": str(exc)}
+                if attempt < self.MAX_ATTEMPTS:
+                    time.sleep(2)
+
+        if data is None:
+            return {"provider": "google_pagespeed", "configured": True, "error": str(last_error)}
 
         lighthouse = data.get("lighthouseResult", {})
         categories = lighthouse.get("categories", {})

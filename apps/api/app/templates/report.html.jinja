@@ -58,6 +58,10 @@
   .print-actions button { font: inherit; padding: 0.5rem 1rem; border-radius: 6px; border: 1px solid #33404d; background: #1a1f27; color: white; cursor: pointer; }
   @media print { .print-actions { display: none; } body { padding: 0.5in; } }
   .empty-note { color: #5b6472; font-size: 0.85rem; font-style: italic; }
+  .coverage-banner { border: 2px solid; border-radius: 8px; padding: 0.9rem 1rem; margin: 1rem 0; font-size: 0.9rem; }
+  .coverage-banner.blocked { border-color: #d64545; background: #fbe1e1; color: #7a1f1f; }
+  .coverage-banner.partial { border-color: #c98a1f; background: #fbeecb; color: #6b4a00; }
+  .coverage-banner .coverage-title { font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; font-size: 0.8rem; }
 </style>
 </head>
 <body>
@@ -87,6 +91,14 @@
 <div class="meta-item" style="border-color:#8a5a00; background:#fbeecb; margin-bottom:1rem;">
   <div class="label">Synthetic demo data</div>
   <div class="value">This scan uses fabricated fixture data for demonstration purposes only. It does not reflect a real assessment.</div>
+</div>
+{% endif %}
+
+{% if report.coverage.state != "full" %}
+<div class="coverage-banner {{ report.coverage.state }}">
+  <div class="coverage-title">{{ "Scan blocked" if report.coverage.state == "blocked" else "Partial scan coverage" }}</div>
+  <div>{{ report.coverage.message }}</div>
+  {% if report.coverage.detail %}<div style="margin-top:0.4rem;">{{ report.coverage.detail }}</div>{% endif %}
 </div>
 {% endif %}
 
@@ -172,6 +184,9 @@ Rules that don't appear in the risk register below still ran; they simply found 
         not found under any of {{ report.dns_email.dkim_probed_count }} commonly probed selectors (not proof of absence — a custom selector would not be detected)
       {% endif %}
     </td></tr>
+    {% if report.domain_registration and report.domain_registration.expiration_date %}
+    <tr><td>Domain registration</td><td>Registrar: {{ report.domain_registration.registrar or "unknown" }} · expires {{ report.domain_registration.expiration_date }}{% if report.domain_registration.days_until_expiration is not none %} ({{ report.domain_registration.days_until_expiration }} day(s)){% endif %}</td></tr>
+    {% endif %}
   </tbody>
 </table>
 
@@ -188,6 +203,15 @@ Rules that don't appear in the risk register below still ran; they simply found 
     <tr><td>X-Frame-Options</td><td>{{ report.http_security.x_frame_options or "not present" }}</td></tr>
     <tr><td>Referrer-Policy</td><td>{{ report.http_security.referrer_policy or "not present" }}</td></tr>
     <tr><td>Server header</td><td>{{ report.http_security.server_header or "not present" }}</td></tr>
+    <tr><td>Mixed content (HTTP subresources on HTTPS page)</td><td>{{ report.http_security.mixed_content_count or "none observed" }}</td></tr>
+    {% if report.tls and report.tls.not_after %}
+    <tr><td>TLS certificate issuer</td><td>{{ report.tls.issuer or "unknown" }}</td></tr>
+    <tr><td>TLS certificate expires</td><td>{{ report.tls.not_after }}{% if report.tls.days_until_expiry is not none %} ({{ report.tls.days_until_expiry }} day(s)){% endif %}</td></tr>
+    {% endif %}
+    {% if report.platform_exposure and (report.platform_exposure.xmlrpc or report.platform_exposure.wp_json) %}
+    <tr><td>xmlrpc.php</td><td>{% if report.platform_exposure.xmlrpc %}HTTP {{ report.platform_exposure.xmlrpc.status_code or "error" }}{% else %}—{% endif %}</td></tr>
+    <tr><td>wp-json REST API root</td><td>{% if report.platform_exposure.wp_json %}HTTP {{ report.platform_exposure.wp_json.status_code or "error" }}{% else %}—{% endif %}</td></tr>
+    {% endif %}
   </tbody>
 </table>
 {% else %}
@@ -270,6 +294,20 @@ Rules that don't appear in the risk register below still ran; they simply found 
 {% endfor %}
 {% else %}
 <p class="empty-note">No technologies were positively identified by local rules-based detection.</p>
+{% endif %}
+
+<h2>Accessibility (homepage)</h2>
+{% if report.accessibility and report.accessibility.image_count is defined %}
+<p>A static pass over the rendered homepage — alt text, form labels, and known overlay-widget scripts. Not a substitute for a full manual/automated accessibility audit.</p>
+<table>
+  <tbody>
+    <tr><td>Images with alt text</td><td>{{ report.accessibility.image_count - report.accessibility.images_missing_alt_count }} of {{ report.accessibility.image_count }}</td></tr>
+    <tr><td>Form fields with labels</td><td>{{ report.accessibility.labelable_field_count - report.accessibility.fields_missing_labels_count }} of {{ report.accessibility.labelable_field_count }}</td></tr>
+    <tr><td>Accessibility overlay widget</td><td>{{ report.accessibility.overlay_widget_vendor or "None detected" }}</td></tr>
+  </tbody>
+</table>
+{% else %}
+<p class="empty-note">No accessibility data was recorded for this scan.</p>
 {% endif %}
 
 <h2>Third-party dependencies</h2>

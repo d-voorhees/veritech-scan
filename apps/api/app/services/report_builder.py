@@ -68,6 +68,29 @@ def _build_sitemap_check(
     }
 
 
+def _build_coverage(findings: list[Finding]) -> dict:
+    """Surfaces the scan-coverage state (full/partial/blocked) as its own
+    report field — backed by the same scan_blocked/scan_coverage_partial
+    Finding rows the rules engine already produces, just pulled out so the
+    UI can render it as a top-of-report banner rather than a risk-register
+    row a reader could miss.
+    """
+    coverage_finding = next((f for f in findings if f.category == "scan_coverage"), None)
+    if not coverage_finding:
+        return {
+            "state": "full",
+            "message": "Full coverage — no indication this scan was blocked or degraded.",
+            "finding_id": None,
+        }
+    state = "blocked" if coverage_finding.rule and coverage_finding.rule.rule_key == "scan_blocked" else "partial"
+    return {
+        "state": state,
+        "message": coverage_finding.title,
+        "detail": coverage_finding.impact,
+        "finding_id": str(coverage_finding.id),
+    }
+
+
 def _build_rules_checked(findings: list[Finding]) -> dict:
     """Maps every rule in the static RULE_CATALOG against this scan's actual
     findings, so the report can show "N rules checked, M raised a finding"
@@ -189,6 +212,56 @@ def build_report(db: Session, scan: ScanRequest) -> ReportOut:
         .order_by(PerformanceObservation.created_at)
         .first()
     )
+    tls_evidence = (
+        db.query(EvidenceItem)
+        .filter(
+            EvidenceItem.scan_request_id == scan.id,
+            EvidenceItem.category == "tls",
+            EvidenceItem.source_type == "tls_certificate",
+        )
+        .order_by(EvidenceItem.captured_at)
+        .first()
+    )
+    exposure_evidence = (
+        db.query(EvidenceItem)
+        .filter(
+            EvidenceItem.scan_request_id == scan.id,
+            EvidenceItem.category == "exposure",
+            EvidenceItem.source_type == "endpoint_probe",
+        )
+        .order_by(EvidenceItem.captured_at)
+        .first()
+    )
+    domain_registration_evidence = (
+        db.query(EvidenceItem)
+        .filter(
+            EvidenceItem.scan_request_id == scan.id,
+            EvidenceItem.category == "domain_registration",
+            EvidenceItem.source_type == "rdap_lookup",
+        )
+        .order_by(EvidenceItem.captured_at)
+        .first()
+    )
+    accessibility_evidence = (
+        db.query(EvidenceItem)
+        .filter(
+            EvidenceItem.scan_request_id == scan.id,
+            EvidenceItem.category == "accessibility",
+            EvidenceItem.source_type == "static_accessibility_scan",
+        )
+        .order_by(EvidenceItem.captured_at)
+        .first()
+    )
+    browser_render_evidence = (
+        db.query(EvidenceItem)
+        .filter(
+            EvidenceItem.scan_request_id == scan.id,
+            EvidenceItem.category == "browser_render",
+            EvidenceItem.source_type == "playwright_render",
+        )
+        .order_by(EvidenceItem.captured_at)
+        .first()
+    )
 
     failed_jobs = (
         db.query(ScanJob)
@@ -254,6 +327,16 @@ def build_report(db: Session, scan: ScanRequest) -> ReportOut:
             "permissions_policy": http_obs.permissions_policy,
             "server_header": http_obs.server_header,
             "response_duration_ms": http_obs.response_duration_ms,
+            "mixed_content_count": (
+                browser_render_evidence.normalized_payload_json.get("mixed_content_count")
+                if browser_render_evidence
+                else None
+            ),
+            "mixed_content_urls": (
+                browser_render_evidence.normalized_payload_json.get("mixed_content_urls", [])
+                if browser_render_evidence
+                else []
+            ),
         }
 
     error_pages = [p for p in pages if p.status_code and p.status_code >= 400]
@@ -351,12 +434,17 @@ def build_report(db: Session, scan: ScanRequest) -> ReportOut:
         severity_counts=severity_counts,
         findings=finding_outs,
         rules_checked=rules_checked,
+        coverage=_build_coverage(findings),
         dns_email=dns_email,
         http_security=http_security,
         crawl_indexability=crawl_indexability,
         technology=technology,
         third_party_dependencies=third_party_dependencies,
         performance=performance,
+        tls=tls_evidence.normalized_payload_json if tls_evidence else {},
+        platform_exposure=exposure_evidence.normalized_payload_json if exposure_evidence else {},
+        domain_registration=domain_registration_evidence.normalized_payload_json if domain_registration_evidence else {},
+        accessibility=accessibility_evidence.normalized_payload_json if accessibility_evidence else {},
         limitations=limitations,
         generated_at=datetime.now(timezone.utc),
     )

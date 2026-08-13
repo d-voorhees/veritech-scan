@@ -20,6 +20,10 @@ EVIDENCE_CATEGORIES = (
     "browser_render",
     "technology",
     "performance",
+    "tls",
+    "exposure",
+    "domain_registration",
+    "accessibility",
 )
 
 

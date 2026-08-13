@@ -17,7 +17,7 @@ from selectolax.parser import HTMLParser
 
 from app.collectors.user_agent import USER_AGENT
 from app.config import get_settings
-from app.core.crawl_policy import is_crawlable_url, normalize_url_no_fragment
+from app.core.crawl_policy import is_crawlable_url, is_same_origin_hostname, normalize_url_no_fragment
 from app.core.url_safety import UnsafeTargetError, revalidate_redirect_url
 from app.models.evidence import EvidenceItem
 from app.models.page import Page
@@ -69,7 +69,7 @@ def _extract_page_data(html: str, page_url: str, allowed_hostname: str) -> dict:
         absolute = urljoin(page_url, href)
         absolute = normalize_url_no_fragment(absolute)
         hostname = (urlsplit(absolute).hostname or "").lower()
-        if hostname == allowed_hostname.lower():
+        if is_same_origin_hostname(hostname, allowed_hostname):
             internal_links.add(absolute)
             discovered_links.append(absolute)
         elif hostname:
@@ -152,7 +152,7 @@ def run_crawl(db, scan_request_id: uuid.UUID, canonical_url: str, hostname: str,
                     next_url = urljoin(final_url, location)
                     revalidate_redirect_url(next_url)
                     next_hostname = (urlsplit(next_url).hostname or "").lower()
-                    if next_hostname != hostname.lower():
+                    if not is_same_origin_hostname(next_hostname, hostname):
                         page.fetch_error = f"Redirected off-origin to {next_url}; not followed."
                         break
                     final_url = next_url

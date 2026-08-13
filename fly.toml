@@ -45,5 +45,10 @@ primary_region = "iad"
     path = "/health"
 
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "256mb"
+  # Bumped from shared-cpu-1x/256mb: on cold start, entrypoint.sh launches
+  # Next.js (Node) and FastAPI (Python/Uvicorn) at the same time, and both
+  # were serializing on one weak shared vCPU + thin memory budget instead
+  # of booting in parallel — that contention was most of the ~18s cold
+  # start, not Fly's Machine-boot time (which is ~1.3s).
+  size = "shared-cpu-2x"
+  memory = "512mb"

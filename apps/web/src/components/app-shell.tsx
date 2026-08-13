@@ -2,23 +2,21 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FileSearch, LayoutDashboard, ListChecks, LogOut, Settings, User } from "lucide-react";
+import { FileSearch, LayoutDashboard, ListChecks, LogOut, User } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { productConfig } from "@/lib/config";
-import { useMe, useLogout } from "@/lib/use-auth";
+import { useLogout } from "@/lib/use-auth";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/scans", label: "Scans", icon: ListChecks },
   { href: "/scans/new", label: "New Scan", icon: FileSearch },
-  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { data: me } = useMe();
   const logout = useLogout();
 
   return (
@@ -55,15 +53,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-3">
             <Link
               href="/settings"
-              title={me?.email}
+              title="Profile"
               aria-label="Profile"
               className="flex h-8 w-8 items-center justify-center border border-border text-muted-foreground transition-colors hover:text-foreground"
             >
               <User className="h-4 w-4" />
             </Link>
-            <Button variant="ghost" size="sm" onClick={() => logout.mutate()}>
+            <Button
+              variant="ghost"
+              size="sm"
+              title="Sign out"
+              aria-label="Sign out"
+              className="h-8 w-8 px-0"
+              onClick={() => logout.mutate()}
+            >
               <LogOut className="h-3.5 w-3.5" />
-              Sign out
             </Button>
           </div>
         </div>

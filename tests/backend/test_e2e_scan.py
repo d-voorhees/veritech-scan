@@ -90,6 +90,8 @@ def test_end_to_end_happy_path_scan(db, scan_request, monkeypatch):
     respx.get("https://example.com/pricing").mock(return_value=Response(404))
     respx.get("https://example.com/robots.txt").mock(return_value=Response(200, text=ROBOTS_TXT))
     respx.get("https://example.com/sitemap.xml").mock(return_value=Response(200, text=SITEMAP_XML))
+    respx.get("https://example.com/xmlrpc.php").mock(return_value=Response(404))
+    respx.get("https://example.com/wp-json/").mock(return_value=Response(404))
 
     scan_id = scan_request.id
     canonical_url = "https://example.com/"
@@ -112,7 +114,13 @@ def test_end_to_end_happy_path_scan(db, scan_request, monkeypatch):
             ("_dmarc.example.com", "TXT"): ['"v=DMARC1; p=none"'],
         }
     )
-    dns_result = dns_checks.run_dns_and_email_checks(db, scan_id, "example.com", resolver=dns_resolver)
+    dns_result = dns_checks.run_dns_and_email_checks(
+        db,
+        scan_id,
+        "example.com",
+        resolver=dns_resolver,
+        rdap_lookup_fn=lambda hostname: {"domain": hostname, "registrar": None, "expiration_date": None},
+    )
     assert dns_result["spf_present"] is True
     assert dns_result["dmarc_present"] is True
     assert dns_result["dmarc_policy"] == "none"

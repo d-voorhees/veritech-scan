@@ -114,7 +114,7 @@ def request_scan_runner(db: Session, scan: ScanRequest) -> None:
         machine = client.create_machine(
             name=f"scan-runner-{scan.id}",
             region=settings.fly_primary_region,
-            image=_current_image_ref(settings.fly_app_name),
+            image=_scan_runner_image_ref(settings.fly_app_name),
             env={"SCAN_ID": str(scan.id)},
             # The image's ENTRYPOINT is already /app/scripts/entrypoint.sh
             # (see Dockerfile) — cmd becomes its argument(s), not a second
@@ -141,15 +141,18 @@ def _fly_api_base_url() -> str:
     return os.environ.get("FLY_API_HOSTNAME", "https://api.machines.dev/v1")
 
 
-def _current_image_ref(fly_app_name: str) -> str:
-    """The web/API Machine's own running image, re-used to launch the
-    scan-runner Machine. Fly injects FLY_IMAGE_REF into every Machine's
-    environment with the exact image reference it's running (e.g.
-    `registry.fly.io/<app>:deployment-<id>`) — see
-    https://fly.io/docs/machines/runtime-environment/. Falls back to the
-    app's `:latest` tag if unset (e.g. running outside a Fly Machine).
+def _scan_runner_image_ref(fly_app_name: str) -> str:
+    """The scan-runner image (Playwright/Chromium included) — a distinct
+    build target from the web/API Machine's own image (see Dockerfile),
+    kept Chromium-free so its cold starts stay fast. Because the two
+    images differ, this can't reuse FLY_IMAGE_REF (which reflects
+    whichever image the *current* Machine is running — the web image when
+    called from the web/API Machine, as it always is here). Instead it
+    references the fixed tag scripts/deploy-fly.sh pushes on every deploy
+    via `flyctl deploy --build-target scan-runner --image-label
+    scan-runner-latest`.
     """
-    return os.environ.get("FLY_IMAGE_REF") or f"registry.fly.io/{fly_app_name}:latest"
+    return f"registry.fly.io/{fly_app_name}:scan-runner-latest"
 
 
 def _spawn_local_runner_subprocess(scan_id: uuid.UUID) -> None:

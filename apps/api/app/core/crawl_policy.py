@@ -68,6 +68,17 @@ def has_excluded_path(path: str) -> bool:
     return any(pattern.search(path) for pattern in EXCLUDED_PATH_PATTERNS)
 
 
+def is_same_origin_hostname(hostname: str, allowed_hostname: str) -> bool:
+    """True if hostname matches allowed_hostname, treating `www.` and the bare
+    apex domain as the same origin (sites commonly redirect between the two)."""
+
+    def _strip_www(value: str) -> str:
+        value = value.lower()
+        return value[4:] if value.startswith("www.") else value
+
+    return _strip_www(hostname) == _strip_www(allowed_hostname)
+
+
 def is_crawlable_url(url: str, allowed_hostname: str) -> bool:
     """True if the crawler is permitted to fetch this URL."""
     parts = urlsplit(url)
@@ -78,7 +89,7 @@ def is_crawlable_url(url: str, allowed_hostname: str) -> bool:
         return False
 
     hostname = (parts.hostname or "").lower()
-    if hostname != allowed_hostname.lower():
+    if not is_same_origin_hostname(hostname, allowed_hostname):
         return False
 
     if has_excluded_extension(parts.path):

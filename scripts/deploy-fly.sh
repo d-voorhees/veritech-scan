@@ -3,6 +3,15 @@
 # built on Fly's infrastructure, not locally, so this never requires Docker
 # or Docker Desktop on the developer's machine. See docs/fly-deployment.md.
 #
+# Two images come out of this, both built from the one Dockerfile (see its
+# top-of-file comment): the default `web` target gets deployed to the
+# web/API Machine as usual, and the `scan-runner` target (Playwright/
+# Chromium included) is separately built and pushed to a fixed tag
+# (`scan-runner-latest`) that apps/api/app/services/scan_orchestrator.py
+# references explicitly when creating each scan's on-demand Machine — see
+# _scan_runner_image_ref() there for why this can't just reuse
+# FLY_IMAGE_REF.
+#
 # Usage: FLY_APP_NAME=veritech-scan ./scripts/deploy-fly.sh [extra flyctl args]
 set -euo pipefail
 
@@ -15,6 +24,10 @@ fi
 FLY_BIN="$(command -v flyctl || command -v fly)"
 
 "$FLY_BIN" deploy --remote-only --app "$FLY_APP_NAME" "$@"
+
+echo "Building and pushing the scan-runner image (Playwright/Chromium)..."
+"$FLY_BIN" deploy --remote-only --build-only --push --app "$FLY_APP_NAME" \
+  --build-target scan-runner --image-label scan-runner-latest
 
 cat <<EOF
 

@@ -102,6 +102,14 @@ All notable changes to this project are documented in this file.
   `heartbeat_at`, and `retry_count` tracking on `scan_requests`. Rate
   limiting moved from a Redis counter to a Postgres query. See
   `docs/architecture.md` and `docs/fly-deployment.md`.
+- **Collection tasks list didn't map to the 13 checks it feeds.** The
+  "Collection tasks" card on the scan detail page listed raw pipeline
+  stage names (`http_checks`, `dns_email_posture`, ...) with no visible
+  link to what they actually investigate, which read as inconsistent with
+  the "Rules engine coverage" table's 13 checks below it. Each task now
+  shows a one-line description of the check category and count it feeds
+  (e.g. "Email deliverability — SPF, DMARC, DKIM (4 of 13 checks)"),
+  sourced from the same `RULE_CATALOG` the rules-coverage table reads.
 
 ### Fixed
 
@@ -132,3 +140,53 @@ All notable changes to this project are documented in this file.
   `postgres` hostname that only resolves inside Docker — causing
   `make migrate` to fail with `nodename nor servname provided, or not
   known` even when a correctly filled-out root `.env` was present.
+- **Crawl stopped after 1 page whenever the site redirected between apex
+  and `www`.** `hostname` comparisons in the crawler and crawl policy used
+  strict string equality, so a target entered as `example.com` that
+  redirects to `www.example.com` (or vice versa) tripped the
+  off-origin-redirect guard on the very first request: the homepage body
+  was never fetched, no links were discovered, and the crawl ended having
+  fetched exactly 1 page regardless of the selected page budget (10/25/50).
+  Added `is_same_origin_hostname()` (`crawl_policy.py`), which treats
+  `www.` and the bare apex domain as the same origin, and applied it to
+  the redirect-follow check and internal-link classification in
+  `crawler.py` in addition to `is_crawlable_url`.
+- **Third-party dependency count inflated by the same www/apex mismatch.**
+  `browser_render.py`'s third-party classification still compared hostnames
+  with strict string equality, so a same-site request served from `www.`
+  (when the scan target was the bare apex, or vice versa) was miscounted
+  as a third-party dependency — inflating that count and risking a false
+  `excessive_third_party_domains` finding. Now reuses the same
+  `is_same_origin_hostname()` helper.
+- **Technology detection missed real, positively-identified stacks (e.g.
+  WordPress/WooCommerce sites behind a CDN or bot-challenge page).**
+  Detection only ever scanned the raw pre-JS HTTP response
+  (`http_checks`'s `html_text`), which optimizers like Cloudflare Rocket
+  Loader (which defers/rewrites `<script>` tags) or a JS-gated
+  bot-protection challenge can strip of every fingerprint before a real
+  browser ever executes anything. `browser_render.py` now captures the
+  fully rendered DOM (`page.content()`) and `technology.py`'s
+  `run_technology_detection` scans it — plus a robots.txt excerpt, which
+  often reveals platform-specific paths (e.g. `Disallow: /wp-admin/`) even
+  when the page itself doesn't — alongside the raw response. Combining
+  sources only widens what can be found; each rule still fires at most
+  once regardless of how many needles match.
+- **Desktop PageSpeed Insights scores were silently blank while mobile
+  populated.** `GooglePageSpeedProvider`'s hardcoded 30-second httpx
+  timeout was too short for PSI's real-world response times (commonly
+  30-60s+, especially on a cold cache), so the desktop `runPagespeed` call
+  would time out and fail with no error surfaced anywhere — not in the UI,
+  not in logs. Raised the timeout to 90s and added one retry with backoff
+  (`performance.py`).
+- **Report page showed misleading "clean" results before a scan had
+  actually finished collecting evidence** — e.g. "No finding raised" on
+  every rule, empty technology/dependency lists — indistinguishable from a
+  genuinely clean scan. The dashboard polls `/report` continuously while a
+  scan runs, but findings only exist once the `rules_engine` job (the
+  last pipeline step) completes, so every section rendered its normal
+  "nothing here" state regardless of whether the underlying collection
+  task had even started. The scan detail page now checks each section's
+  job status and shows a "Pending — hasn't finished collecting yet" state
+  instead; the rules-coverage table also now says "OK" rather than "No
+  finding raised" for a rule that genuinely ran clean, reserving "Pending"
+  for checks that haven't run yet.

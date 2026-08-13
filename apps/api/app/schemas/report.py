@@ -37,6 +37,7 @@ class ReportOut(BaseModel):
     severity_counts: FindingSeverityCounts
     findings: list[FindingOut]
     rules_checked: dict
+    coverage: dict
 
     dns_email: dict
     http_security: dict
@@ -44,6 +45,10 @@ class ReportOut(BaseModel):
     technology: dict
     third_party_dependencies: dict
     performance: dict
+    tls: dict
+    platform_exposure: dict
+    domain_registration: dict
+    accessibility: dict
 
     limitations: list[LimitationOut]
     generated_at: datetime

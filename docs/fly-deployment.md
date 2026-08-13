@@ -89,9 +89,13 @@ Notes:
 make fly-deploy
 ```
 
-This runs `flyctl deploy --remote-only --app "$FLY_APP_NAME"` — the image
-is built on Fly's remote builder, not on your machine. First deploy
-provisions the web/API Machine(s) per `fly.toml`.
+This runs `scripts/deploy-fly.sh`, which does two remote builds — the
+default `web` target (Chromium-free, deployed to the web/API Machine per
+`fly.toml`) and, separately, the `scan-runner` target (Playwright/Chromium
+included, pushed to the fixed `scan-runner-latest` tag that
+`scan_orchestrator.py` references when creating each scan's on-demand
+Machine — see the Dockerfile's top-of-file comment). Both build on Fly's
+remote builder, not on your machine.
 
 ## 5. Run migrations (`make fly-migrate`)
 

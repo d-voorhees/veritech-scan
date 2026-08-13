@@ -16,11 +16,13 @@ from datetime import datetime, timezone
 
 import dns.exception
 import dns.resolver
+import httpx
 
 from app.models.evidence import EvidenceItem
 from app.models.observation import DNSObservation
 
 RECORD_TYPES = ("A", "AAAA", "CNAME", "MX", "NS", "TXT")
+RDAP_TIMEOUT_SECONDS = 8
 
 # Default selectors used out-of-the-box by common email/marketing providers.
 # Not exhaustive — a domain using a custom selector won't be found here.
@@ -84,8 +86,68 @@ def _discover_dkim(resolver: dns.resolver.Resolver, hostname: str) -> list[dict]
     return found
 
 
+def _registrable_domain(hostname: str) -> str:
+    """Best-effort strip of a leading 'www.' label — RDAP domain objects
+    exist only for registered (not sub-) domains. Does not handle deeper
+    subdomains or multi-part public suffixes; a mismatch just produces a
+    lookup error below, not a wrong answer.
+    """
+    return hostname[4:] if hostname.lower().startswith("www.") else hostname
+
+
+def _extract_registrar_name(entities: list | None) -> str | None:
+    for entity in entities or []:
+        if "registrar" not in (entity.get("roles") or []):
+            continue
+        vcard = entity.get("vcardArray")
+        if not vcard or len(vcard) < 2:
+            continue
+        for field in vcard[1]:
+            if field and field[0] == "fn" and len(field) >= 4:
+                return field[3]
+    return None
+
+
+def fetch_domain_registration(hostname: str) -> dict:
+    """RDAP lookup via rdap.org's registry-bounce service: a fixed, trusted
+    third-party endpoint (same precedent as the Google PageSpeed call in
+    collectors/performance.py) — not the user-controlled scan target, so
+    this sits outside the per-target SSRF revalidation boundary by design.
+    """
+    domain = _registrable_domain(hostname)
+    try:
+        with httpx.Client(timeout=RDAP_TIMEOUT_SECONDS, follow_redirects=True) as client:
+            resp = client.get(f"https://rdap.org/domain/{domain}")
+            resp.raise_for_status()
+            data = resp.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        return {"domain": domain, "error": str(exc)}
+
+    events = {e.get("eventAction"): e.get("eventDate") for e in data.get("events", []) if e.get("eventAction")}
+    expiration_date = events.get("expiration")
+    days_until_expiration = None
+    if expiration_date:
+        try:
+            exp = datetime.fromisoformat(expiration_date.replace("Z", "+00:00"))
+            days_until_expiration = (exp - datetime.now(timezone.utc)).days
+        except ValueError:
+            pass
+
+    return {
+        "domain": domain,
+        "registrar": _extract_registrar_name(data.get("entities")),
+        "registration_date": events.get("registration"),
+        "expiration_date": expiration_date,
+        "days_until_expiration": days_until_expiration,
+    }
+
+
 def run_dns_and_email_checks(
-    db, scan_request_id: uuid.UUID, hostname: str, resolver: dns.resolver.Resolver | None = None
+    db,
+    scan_request_id: uuid.UUID,
+    hostname: str,
+    resolver: dns.resolver.Resolver | None = None,
+    rdap_lookup_fn=None,
 ) -> dict:
     if resolver is None:
         resolver = dns.resolver.Resolver()
@@ -236,4 +298,34 @@ def run_dns_and_email_checks(
 
     summary["evidence_id"] = email_evidence.id
     summary["dns_evidence_id"] = dns_evidence.id
+
+    # --- Domain registration (RDAP): age and registrar expiration. -------------
+    lookup_fn = rdap_lookup_fn or fetch_domain_registration
+    try:
+        registration = lookup_fn(hostname)
+    except Exception as exc:  # noqa: BLE001 -- a third-party RDAP hiccup must not fail DNS collection
+        registration = {"domain": _registrable_domain(hostname), "error": str(exc)}
+
+    registration_evidence = EvidenceItem(
+        scan_request_id=scan_request_id,
+        category="domain_registration",
+        source_type="rdap_lookup",
+        source_url_or_identifier=registration.get("domain", hostname),
+        captured_at=datetime.now(timezone.utc),
+        confidence="high" if not registration.get("error") else "low",
+        normalized_payload_json=registration,
+        human_readable_summary=(
+            f"Registrar: {registration.get('registrar') or 'unknown'}. "
+            f"Registered {registration.get('registration_date') or 'unknown'}, "
+            f"expires {registration.get('expiration_date') or 'unknown'}."
+            if not registration.get("error")
+            else f"RDAP domain registration lookup failed: {registration['error']}"
+        ),
+        raw_response_reference=None,
+    )
+    db.add(registration_evidence)
+    db.flush()
+    summary["domain_registration"] = registration
+    summary["domain_registration_evidence_id"] = registration_evidence.id
+
     return summary

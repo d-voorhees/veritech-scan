@@ -16,6 +16,21 @@ import { cn, formatDateTime, titleCase } from "@/lib/utils";
 
 const ACTIVE_STATUSES = new Set(["queued", "starting", "running"]);
 
+// What each collection task feeds into, mirrored from the rules engine's
+// static RULE_CATALOG (apps/api/app/rules/definitions.py) so this list
+// reads as "what does this task investigate" rather than a raw pipeline
+// stage name — the two must be kept in sync if rules move between tasks.
+const TASK_AREA_MAP: Record<string, string> = {
+  http_checks: "Security posture — HTTPS, HSTS, CSP (3 of 13 checks)",
+  robots_sitemap: "Discoverability — sitemap presence (1 of 13 checks)",
+  crawl: "Indexability, on-page SEO, site reliability — canonical tag, meta description, crawl errors (3 of 13 checks)",
+  dns_email_posture: "Email deliverability — SPF, DMARC, DKIM (4 of 13 checks)",
+  browser_render: "Dependency management — third-party request domains (1 of 13 checks)",
+  technology_detection: "Technology stack identification (informational, not one of the 13 rule checks)",
+  performance: "Performance — mobile PageSpeed score (1 of 13 checks)",
+  rules_engine: "Evaluates evidence from every task above against all 13 checks and produces findings",
+};
+
 export default function ScanDetailPage({ params }: { params: Promise<{ scanId: string }> }) {
   const { scanId } = use(params);
   useRequireAuth();
@@ -53,6 +68,13 @@ export default function ScanDetailPage({ params }: { params: Promise<{ scanId: s
 
   const isActive = ACTIVE_STATUSES.has(scan.status);
 
+  const jobStatusByTask = new Map(scan.jobs.map((j) => [j.task_name, j.status]));
+  const isTaskPending = (taskName: string) => {
+    const status = jobStatusByTask.get(taskName);
+    return status === "pending" || status === "running" || status === undefined;
+  };
+  const rulesPending = isTaskPending("rules_engine");
+
   return (
     <AppShell>
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -78,6 +100,10 @@ export default function ScanDetailPage({ params }: { params: Promise<{ scanId: s
         </div>
       )}
 
+      {report && !rulesPending && report.coverage.state !== "full" && (
+        <CoverageBanner coverage={report.coverage as { state: string; message: string; detail?: string }} />
+      )}
+
       <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
         <MetaItem label="Authorization confirmed" value={formatDateTime(scan.authorization_confirmed_at)} />
         <MetaItem label="Started" value={formatDateTime(scan.started_at)} />
@@ -88,18 +114,28 @@ export default function ScanDetailPage({ params }: { params: Promise<{ scanId: s
       <Card className="mt-6">
         <CardHeader>
           <CardTitle>Collection tasks</CardTitle>
-          <CardDescription>Each area runs independently — one failure does not fail the whole scan.</CardDescription>
+          <CardDescription>
+            Each task runs independently — one failure does not fail the whole scan. Together they feed the 13
+            checks the rules engine evaluates below.
+          </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <ul className="divide-y divide-border">
             {scan.jobs.map((job) => (
-              <li key={job.id} className="flex items-center justify-between px-5 py-2.5 text-sm">
-                <div className="flex items-center gap-2.5">
-                  <TaskStatusIcon status={job.status} />
-                  <span>{titleCase(job.task_name)}</span>
+              <li key={job.id} className="flex items-start justify-between gap-4 px-5 py-2.5 text-sm">
+                <div className="flex items-start gap-2.5">
+                  <span className="mt-0.5">
+                    <TaskStatusIcon status={job.status} />
+                  </span>
+                  <div>
+                    <div>{titleCase(job.task_name)}</div>
+                    {TASK_AREA_MAP[job.task_name] && (
+                      <div className="mt-0.5 text-xs text-muted-foreground">{TASK_AREA_MAP[job.task_name]}</div>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  {job.error_message && <span className="text-red-600">{job.error_message}</span>}
+                <div className="flex shrink-0 items-center gap-3 whitespace-nowrap text-xs text-muted-foreground">
+                  {job.error_message && <span className="max-w-xs truncate text-red-600">{job.error_message}</span>}
                   <span className="capitalize">{job.status}</span>
                 </div>
               </li>
@@ -133,15 +169,20 @@ export default function ScanDetailPage({ params }: { params: Promise<{ scanId: s
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-4 gap-3">
-                <SeverityTile label="High" count={report.severity_counts.high} variant="high" />
-                <SeverityTile label="Medium" count={report.severity_counts.medium} variant="medium" />
-                <SeverityTile label="Low" count={report.severity_counts.low} variant="low" />
-                <SeverityTile label="Info" count={report.severity_counts.info} variant="info" />
+                <SeverityTile label="High" count={report.severity_counts.high} variant="high" pending={rulesPending} />
+                <SeverityTile
+                  label="Medium"
+                  count={report.severity_counts.medium}
+                  variant="medium"
+                  pending={rulesPending}
+                />
+                <SeverityTile label="Low" count={report.severity_counts.low} variant="low" pending={rulesPending} />
+                <SeverityTile label="Info" count={report.severity_counts.info} variant="info" pending={rulesPending} />
               </div>
             </CardContent>
           </Card>
 
-          <RulesCoverageSection rulesChecked={report.rules_checked} />
+          <RulesCoverageSection rulesChecked={report.rules_checked} pending={rulesPending} />
 
           <Card className="mt-6">
             <CardHeader>
@@ -152,9 +193,11 @@ export default function ScanDetailPage({ params }: { params: Promise<{ scanId: s
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              {report.findings.length === 0 ? (
+              {rulesPending ? (
+                <PendingNotice label="the rules engine" padded />
+              ) : report.findings.length === 0 ? (
                 <p className="px-5 py-4 text-sm text-muted-foreground">
-                  No findings were raised by the rules engine for the evidence collected so far.
+                  No findings were raised by the rules engine for the evidence collected.
                 </p>
               ) : (
                 <table className="w-full text-sm">
@@ -187,12 +230,29 @@ export default function ScanDetailPage({ params }: { params: Promise<{ scanId: s
             </CardContent>
           </Card>
 
-          <DnsSection dnsEmail={report.dns_email} />
-          <HttpSection httpSecurity={report.http_security} />
-          <CrawlSection crawl={report.crawl_indexability} maxPages={scan.max_pages} />
-          <TechnologySection technology={report.technology} />
-          <ThirdPartyDependenciesSection thirdPartyDependencies={report.third_party_dependencies} />
-          <PerformanceSection performance={report.performance} />
+          <DnsSection
+            dnsEmail={report.dns_email}
+            domainRegistration={report.domain_registration}
+            pending={isTaskPending("dns_email_posture")}
+          />
+          <HttpSection
+            httpSecurity={report.http_security}
+            tls={report.tls}
+            platformExposure={report.platform_exposure}
+            pending={isTaskPending("http_checks")}
+          />
+          <CrawlSection
+            crawl={report.crawl_indexability}
+            maxPages={scan.max_pages}
+            pending={isTaskPending("crawl")}
+          />
+          <TechnologySection technology={report.technology} pending={isTaskPending("technology_detection")} />
+          <ThirdPartyDependenciesSection
+            thirdPartyDependencies={report.third_party_dependencies}
+            pending={isTaskPending("browser_render")}
+          />
+          <PerformanceSection performance={report.performance} pending={isTaskPending("performance")} />
+          <AccessibilitySection accessibility={report.accessibility} pending={isTaskPending("browser_render")} />
 
           <Card className="mt-6">
             <CardHeader>
@@ -214,6 +274,24 @@ export default function ScanDetailPage({ params }: { params: Promise<{ scanId: s
   );
 }
 
+function CoverageBanner({ coverage }: { coverage: { state: string; message: string; detail?: string } }) {
+  const isBlocked = coverage.state === "blocked";
+  return (
+    <div
+      className={cn(
+        "mt-4 rounded-md border-2 px-4 py-3 text-sm",
+        isBlocked ? "border-red-400 bg-red-50 text-red-900" : "border-amber-400 bg-amber-50 text-amber-900"
+      )}
+    >
+      <div className="flex items-center gap-2 font-semibold uppercase tracking-wide">
+        <Badge variant={isBlocked ? "high" : "medium"}>{isBlocked ? "Blocked" : "Partial coverage"}</Badge>
+        {coverage.message}
+      </div>
+      {coverage.detail && <p className="mt-1.5 text-sm">{coverage.detail}</p>}
+    </div>
+  );
+}
+
 function MetaItem({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-md border border-border px-3 py-2">
@@ -227,14 +305,16 @@ function SeverityTile({
   label,
   count,
   variant,
+  pending,
 }: {
   label: string;
   count: number;
   variant: "high" | "medium" | "low" | "info";
+  pending: boolean;
 }) {
   return (
     <div className="rounded-md border border-border p-4 text-center">
-      <div className={cn("text-2xl font-semibold")}>{count}</div>
+      <div className={cn("text-2xl font-semibold")}>{pending ? "—" : count}</div>
       <Badge variant={variant} className="mt-1">
         {label}
       </Badge>
@@ -242,10 +322,21 @@ function SeverityTile({
   );
 }
 
+function PendingNotice({ label, padded = false }: { label: string; padded?: boolean }) {
+  return (
+    <p className={cn("flex items-center gap-2 text-sm text-muted-foreground", padded && "px-5 py-4")}>
+      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      Pending — {label} hasn&rsquo;t finished collecting yet.
+    </p>
+  );
+}
+
 function RulesCoverageSection({
   rulesChecked,
+  pending,
 }: {
   rulesChecked: { total_count: number; fired_count: number; rules: Array<Record<string, unknown>> };
+  pending: boolean;
 }) {
   const rules = rulesChecked.rules ?? [];
   return (
@@ -253,8 +344,9 @@ function RulesCoverageSection({
       <CardHeader>
         <CardTitle>Rules engine coverage</CardTitle>
         <CardDescription>
-          {rulesChecked.total_count} rules checked, {rulesChecked.fired_count} raised a finding. Rules that don&rsquo;t
-          appear in the risk register below still ran — they simply found nothing to flag.
+          {pending
+            ? "The rules engine runs last, once all other collection tasks finish — outcomes below are not final yet."
+            : `${rulesChecked.total_count} rules checked, ${rulesChecked.fired_count} raised a finding. Rules marked OK still ran — they simply found nothing to flag.`}
         </CardDescription>
       </CardHeader>
       <CardContent className="p-0">
@@ -277,8 +369,13 @@ function RulesCoverageSection({
                       <Badge variant={severityToVariant(String(r.severity))}>{String(r.severity)}</Badge>
                       {String(r.title)}
                     </span>
+                  ) : pending ? (
+                    <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Pending
+                    </span>
                   ) : (
-                    <span className="text-muted-foreground">No finding raised</span>
+                    <span className="text-muted-foreground">OK</span>
                   )}
                 </td>
               </tr>
@@ -297,7 +394,15 @@ function TaskStatusIcon({ status }: { status: string }) {
   return <CircleDashed className="h-4 w-4 text-muted-foreground" />;
 }
 
-function DnsSection({ dnsEmail }: { dnsEmail: Record<string, unknown> }) {
+function DnsSection({
+  dnsEmail,
+  domainRegistration,
+  pending,
+}: {
+  dnsEmail: Record<string, unknown>;
+  domainRegistration: Record<string, unknown>;
+  pending: boolean;
+}) {
   const spf = dnsEmail.spf as { record?: string | null } | null;
   const dmarc = dnsEmail.dmarc as { record?: string | null; policy?: string | null } | null;
   const dkimSelectorsFound = (dnsEmail.dkim_selectors_found as string[] | undefined) ?? [];
@@ -308,6 +413,9 @@ function DnsSection({ dnsEmail }: { dnsEmail: Record<string, unknown> }) {
         <CardTitle>DNS and email posture</CardTitle>
       </CardHeader>
       <CardContent>
+        {pending ? (
+          <PendingNotice label="DNS and email posture" />
+        ) : (
         <dl className="grid grid-cols-1 gap-3 text-sm md:grid-cols-3">
           <div>
             <dt className="text-xs uppercase tracking-wide text-muted-foreground">SPF</dt>
@@ -328,7 +436,20 @@ function DnsSection({ dnsEmail }: { dnsEmail: Record<string, unknown> }) {
                 : `Not found under ${dkimProbedCount} commonly probed selectors (not proof of absence)`}
             </dd>
           </div>
+          {domainRegistration && domainRegistration.expiration_date != null && (
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted-foreground">Domain registration</dt>
+              <dd className="mt-0.5 break-words">
+                Registrar: {String(domainRegistration.registrar ?? "unknown")} · expires{" "}
+                {String(domainRegistration.expiration_date)}
+                {domainRegistration.days_until_expiration != null
+                  ? ` (${domainRegistration.days_until_expiration} day(s))`
+                  : ""}
+              </dd>
+            </div>
+          )}
         </dl>
+        )}
       </CardContent>
     </Card>
   );
@@ -336,8 +457,10 @@ function DnsSection({ dnsEmail }: { dnsEmail: Record<string, unknown> }) {
 
 function ThirdPartyDependenciesSection({
   thirdPartyDependencies,
+  pending,
 }: {
   thirdPartyDependencies: { domains: Array<Record<string, unknown>> };
+  pending: boolean;
 }) {
   const domains = thirdPartyDependencies.domains ?? [];
   return (
@@ -345,11 +468,15 @@ function ThirdPartyDependenciesSection({
       <CardHeader>
         <CardTitle>Third-party dependencies</CardTitle>
         <CardDescription>
-          {domains.length} distinct third-party request domain(s) observed while rendering the homepage.
+          {pending
+            ? "Waiting on browser rendering to finish."
+            : `${domains.length} distinct third-party request domain(s) observed while rendering the homepage.`}
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {domains.length === 0 ? (
+        {pending ? (
+          <PendingNotice label="third-party dependency collection" />
+        ) : domains.length === 0 ? (
           <p className="text-sm text-muted-foreground">No third-party request domains were observed.</p>
         ) : (
           <div className="overflow-x-auto">
@@ -380,7 +507,18 @@ function ThirdPartyDependenciesSection({
   );
 }
 
-function HttpSection({ httpSecurity }: { httpSecurity: Record<string, unknown> }) {
+function HttpSection({
+  httpSecurity,
+  tls,
+  platformExposure,
+  pending,
+}: {
+  httpSecurity: Record<string, unknown>;
+  tls: Record<string, unknown>;
+  platformExposure: Record<string, unknown>;
+  pending: boolean;
+}) {
+  const mixedContentCount = Number(httpSecurity.mixed_content_count ?? 0);
   const entries: Array<[string, string]> = [
     ["Final URL", String(httpSecurity.final_url ?? "—")],
     ["Status code", String(httpSecurity.status_code ?? "—")],
@@ -389,21 +527,39 @@ function HttpSection({ httpSecurity }: { httpSecurity: Record<string, unknown> }
     ["Content-Security-Policy", String(httpSecurity.content_security_policy ?? "Not present")],
     ["X-Frame-Options", String(httpSecurity.x_frame_options ?? "Not present")],
     ["Referrer-Policy", String(httpSecurity.referrer_policy ?? "Not present")],
+    ["Mixed content (HTTP on HTTPS)", mixedContentCount > 0 ? `${mixedContentCount} request(s)` : "None observed"],
   ];
+  if (tls && tls.not_after) {
+    entries.push(["TLS certificate issuer", String(tls.issuer ?? "—")]);
+    entries.push([
+      "TLS certificate expires",
+      `${String(tls.not_after)}${tls.days_until_expiry != null ? ` (${tls.days_until_expiry} day(s))` : ""}`,
+    ]);
+  }
+  if (platformExposure && (platformExposure.xmlrpc || platformExposure.wp_json)) {
+    const xmlrpc = platformExposure.xmlrpc as Record<string, unknown> | undefined;
+    const wpJson = platformExposure.wp_json as Record<string, unknown> | undefined;
+    entries.push(["xmlrpc.php", xmlrpc ? `HTTP ${xmlrpc.status_code ?? "error"}` : "—"]);
+    entries.push(["wp-json REST API root", wpJson ? `HTTP ${wpJson.status_code ?? "error"}` : "—"]);
+  }
   return (
     <Card className="mt-6">
       <CardHeader>
         <CardTitle>HTTP and security headers</CardTitle>
       </CardHeader>
       <CardContent>
-        <dl className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
-          {entries.map(([label, value]) => (
-            <div key={label}>
-              <dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt>
-              <dd className="mt-0.5 break-words">{value}</dd>
-            </div>
-          ))}
-        </dl>
+        {pending ? (
+          <PendingNotice label="HTTP and security header checks" />
+        ) : (
+          <dl className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
+            {entries.map(([label, value]) => (
+              <div key={label}>
+                <dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt>
+                <dd className="mt-0.5 break-words">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
       </CardContent>
     </Card>
   );
@@ -442,7 +598,15 @@ function UrlSampleList({
   );
 }
 
-function CrawlSection({ crawl, maxPages }: { crawl: Record<string, unknown>; maxPages: number }) {
+function CrawlSection({
+  crawl,
+  maxPages,
+  pending,
+}: {
+  crawl: Record<string, unknown>;
+  maxPages: number;
+  pending: boolean;
+}) {
   const pages = (crawl.pages as Array<Record<string, unknown>>) ?? [];
   const sc = (crawl.sitemap_check as Record<string, unknown>) ?? {};
   const disallowRules = (sc.disallow_rules as string[] | undefined) ?? [];
@@ -451,11 +615,16 @@ function CrawlSection({ crawl, maxPages }: { crawl: Record<string, unknown>; max
       <CardHeader>
         <CardTitle>Crawl and indexability</CardTitle>
         <CardDescription>
-          {String(crawl.pages_scanned ?? 0)} pages scanned; {String(crawl.error_page_count ?? 0)} returned a 4xx/5xx
-          status.
+          {pending
+            ? "Crawl in progress."
+            : `${String(crawl.pages_scanned ?? 0)} pages scanned; ${String(crawl.error_page_count ?? 0)} returned a 4xx/5xx status.`}
         </CardDescription>
       </CardHeader>
       <CardContent className="p-0">
+        {pending ? (
+          <PendingNotice label="the crawl" padded />
+        ) : (
+        <>
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -518,12 +687,20 @@ function CrawlSection({ crawl, maxPages }: { crawl: Record<string, unknown>; max
             />
           )}
         </div>
+        </>
+        )}
       </CardContent>
     </Card>
   );
 }
 
-function TechnologySection({ technology }: { technology: { technologies: Array<Record<string, unknown>> } }) {
+function TechnologySection({
+  technology,
+  pending,
+}: {
+  technology: { technologies: Array<Record<string, unknown>> };
+  pending: boolean;
+}) {
   const items = technology.technologies ?? [];
 
   const byCategory = new Map<string, Array<Record<string, unknown>>>();
@@ -538,7 +715,7 @@ function TechnologySection({ technology }: { technology: { technologies: Array<R
     <Card className="mt-6">
       <CardHeader>
         <CardTitle>Technology and dependencies</CardTitle>
-        {items.length > 0 && (
+        {!pending && items.length > 0 && (
           <CardDescription>
             {items.length} {items.length === 1 ? "technology" : "technologies"} identified across {categories.length}{" "}
             {categories.length === 1 ? "category" : "categories"}.
@@ -546,7 +723,9 @@ function TechnologySection({ technology }: { technology: { technologies: Array<R
         )}
       </CardHeader>
       <CardContent>
-        {items.length === 0 ? (
+        {pending ? (
+          <PendingNotice label="technology detection" />
+        ) : items.length === 0 ? (
           <p className="text-sm text-muted-foreground">No technologies were positively identified.</p>
         ) : (
           <div className="flex flex-col gap-4">
@@ -581,7 +760,7 @@ type PageSpeedStrategy = {
   ttfb_ms?: number | null;
 };
 
-function PerformanceSection({ performance }: { performance: Record<string, unknown> }) {
+function PerformanceSection({ performance, pending }: { performance: Record<string, unknown>; pending: boolean }) {
   const desktop = performance.desktop as PageSpeedStrategy | undefined;
   const mobile = performance.mobile as PageSpeedStrategy | undefined;
   const configured = performance.configured !== false;
@@ -590,11 +769,15 @@ function PerformanceSection({ performance }: { performance: Record<string, unkno
     <Card className="mt-6">
       <CardHeader>
         <CardTitle>Page speed performance</CardTitle>
-        {!configured && (
+        {!pending && !configured && (
           <CardDescription>Google PageSpeed Insights was not configured; local measurements only.</CardDescription>
         )}
       </CardHeader>
       <CardContent>
+        {pending ? (
+          <PendingNotice label="performance measurement" />
+        ) : (
+        <>
         <dl className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
           <div>
             <dt className="text-xs uppercase tracking-wide text-muted-foreground">Response time</dt>
@@ -647,6 +830,58 @@ function PerformanceSection({ performance }: { performance: Record<string, unkno
               </tbody>
             </table>
           </div>
+        )}
+        </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function AccessibilitySection({
+  accessibility,
+  pending,
+}: {
+  accessibility: Record<string, unknown>;
+  pending: boolean;
+}) {
+  const hasData = accessibility && accessibility.image_count !== undefined;
+  return (
+    <Card className="mt-6">
+      <CardHeader>
+        <CardTitle>Accessibility (homepage)</CardTitle>
+        <CardDescription>
+          A static pass over the rendered homepage — alt text, form labels, and known overlay-widget scripts. Not a
+          substitute for a full manual/automated accessibility audit.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {pending ? (
+          <PendingNotice label="the accessibility pass" />
+        ) : !hasData ? (
+          <p className="text-sm text-muted-foreground">No accessibility data was recorded for this scan.</p>
+        ) : (
+          <dl className="grid grid-cols-1 gap-3 text-sm md:grid-cols-3">
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted-foreground">Images with alt text</dt>
+              <dd className="mt-0.5">
+                {Number(accessibility.image_count ?? 0) - Number(accessibility.images_missing_alt_count ?? 0)} of{" "}
+                {String(accessibility.image_count ?? 0)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted-foreground">Form fields with labels</dt>
+              <dd className="mt-0.5">
+                {Number(accessibility.labelable_field_count ?? 0) -
+                  Number(accessibility.fields_missing_labels_count ?? 0)}{" "}
+                of {String(accessibility.labelable_field_count ?? 0)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted-foreground">Overlay widget</dt>
+              <dd className="mt-0.5">{String(accessibility.overlay_widget_vendor ?? "None detected")}</dd>
+            </div>
+          </dl>
         )}
       </CardContent>
     </Card>
