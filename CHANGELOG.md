@@ -2,6 +2,43 @@
 
 All notable changes to this project are documented in this file.
 
+## v3 — 2026-08-13
+
+### Changed
+
+- **Third-party dependencies: no more duplicate vendor rows.** A vendor
+  served from more than one hostname (e.g. Meta Pixel from both
+  `facebook.net` and `connect.facebook.net`) previously got a separate
+  table row per hostname, all labeled with the same vendor name.
+  `report_builder.py` now groups rows by known vendor name (falling back
+  to hostname when the vendor is unrecognized), merging hostnames and
+  summing request counts into one row. The "N distinct domains observed"
+  count is now tracked separately (`hostname_count`) so it still reflects
+  the real number of hostnames seen, not the post-merge row count.
+- **Added Google Fonts and Cal.com to the known-vendor list.**
+  `fonts.googleapis.com`/`fonts.gstatic.com` now resolve to "Google
+  Fonts" and `cal.com` (including `app.cal.com`) to "Cal.com" instead of
+  showing as uncategorized (`dependency_classification.py`).
+- **Page speed performance: dropped INP and CLS, trimmed LCP/FCP
+  precision.** Removed the INP and CLS rows from the PageSpeed table
+  (HTML export and dashboard). LCP and FCP now render to 3 decimal
+  places instead of Lighthouse's raw floating-point value.
+- **Renamed two jargon-y section headers.** "Collection tasks" →
+  "Scan Collection tasks"; "Rules engine coverage" → "All checks &
+  findings," with its description rewritten in plainer language (also
+  removed em dashes) in both the HTML export and the dashboard.
+- **Accessibility results didn't signal that missing alt text/labels are
+  problems.** "8 of 10 images with alt text" read as a neutral stat, not
+  a finding that needs action. Both the HTML export and dashboard now
+  flag any nonzero missing count with a visible "N missing — needs fix"
+  badge/label alongside the existing count.
+- **Profile icon hover state didn't match the sign-out button next to
+  it.** The nav's profile link only changed text color on hover, while
+  the adjacent sign-out button (a ghost-variant `Button`) also got a
+  `bg-muted` background — inconsistent affordance for two buttons in the
+  same cluster. Profile link now uses the same rounded `hover:bg-muted`
+  treatment (`app-shell.tsx`).
+
 ## v2 — 2026-08-13
 
 ### Added

@@ -113,7 +113,7 @@ export default function ScanDetailPage({ params }: { params: Promise<{ scanId: s
 
       <Card className="mt-6">
         <CardHeader>
-          <CardTitle>Collection tasks</CardTitle>
+          <CardTitle>Scan Collection tasks</CardTitle>
           <CardDescription>
             Each task runs independently — one failure does not fail the whole scan. Together they feed the
             checks the rules engine evaluates below.
@@ -349,11 +349,11 @@ function RulesCoverageSection({
   return (
     <Card className="mt-6">
       <CardHeader>
-        <CardTitle>Rules engine coverage</CardTitle>
+        <CardTitle>All checks & findings</CardTitle>
         <CardDescription>
           {pending
-            ? "The rules engine runs last, once all other collection tasks finish — outcomes below are not final yet."
-            : `${rulesChecked.total_count} rules checked, ${rulesChecked.fired_count} raised a finding. Rules marked OK still ran — they simply found nothing to flag.`}
+            ? "This runs last, after all other scan collection tasks finish, so the outcomes below are not final yet."
+            : `${rulesChecked.total_count} rules were checked, and ${rulesChecked.fired_count} raised a finding. Every rule ran, even the ones marked OK; those simply found nothing to flag.`}
         </CardDescription>
       </CardHeader>
       <CardContent className="p-0">
@@ -466,10 +466,11 @@ function ThirdPartyDependenciesSection({
   thirdPartyDependencies,
   pending,
 }: {
-  thirdPartyDependencies: { domains: Array<Record<string, unknown>> };
+  thirdPartyDependencies: { domains: Array<Record<string, unknown>>; hostname_count?: number };
   pending: boolean;
 }) {
   const domains = thirdPartyDependencies.domains ?? [];
+  const hostnameCount = thirdPartyDependencies.hostname_count ?? domains.length;
   return (
     <Card className="mt-6">
       <CardHeader>
@@ -477,7 +478,7 @@ function ThirdPartyDependenciesSection({
         <CardDescription>
           {pending
             ? "Waiting on browser rendering to finish."
-            : `${domains.length} distinct third-party request domain(s) observed while rendering the homepage.`}
+            : `${hostnameCount} distinct third-party request domain(s) observed while rendering the homepage.`}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -761,8 +762,6 @@ type PageSpeedStrategy = {
   best_practices_score?: number | null;
   seo_score?: number | null;
   lcp_ms?: number | null;
-  cls?: number | null;
-  inp_ms?: number | null;
   fcp_ms?: number | null;
   ttfb_ms?: number | null;
 };
@@ -821,17 +820,19 @@ function PerformanceSection({ performance, pending }: { performance: Record<stri
                     ["Accessibility score", "accessibility_score", ""],
                     ["Best practices score", "best_practices_score", ""],
                     ["SEO score", "seo_score", ""],
-                    ["LCP", "lcp_ms", "ms"],
-                    ["CLS", "cls", ""],
-                    ["INP", "inp_ms", "ms"],
-                    ["FCP", "fcp_ms", "ms"],
-                    ["TTFB", "ttfb_ms", "ms"],
-                  ] as [string, keyof PageSpeedStrategy, string][]
-                ).map(([label, key, unit]) => (
+                    ["LCP", "lcp_ms", "ms", true],
+                    ["FCP", "fcp_ms", "ms", true],
+                    ["TTFB", "ttfb_ms", "ms", false],
+                  ] as [string, keyof PageSpeedStrategy, string, boolean][]
+                ).map(([label, key, unit, round3]) => (
                   <tr key={key} className="border-t">
                     <td className="py-1 pr-4">{label}</td>
-                    <td className="py-1 pr-4">{desktop[key] != null ? `${desktop[key]}${unit}` : "—"}</td>
-                    <td className="py-1">{mobile[key] != null ? `${mobile[key]}${unit}` : "—"}</td>
+                    <td className="py-1 pr-4">
+                      {desktop[key] != null ? `${round3 ? Number(desktop[key]).toFixed(3) : desktop[key]}${unit}` : "—"}
+                    </td>
+                    <td className="py-1">
+                      {mobile[key] != null ? `${round3 ? Number(mobile[key]).toFixed(3) : mobile[key]}${unit}` : "—"}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -869,25 +870,42 @@ function AccessibilitySection({
           <p className="text-sm text-muted-foreground">No accessibility data was recorded for this scan.</p>
         ) : (
           <dl className="grid grid-cols-1 gap-3 text-sm md:grid-cols-3">
-            <div>
-              <dt className="text-xs uppercase tracking-wide text-muted-foreground">Images with alt text</dt>
-              <dd className="mt-0.5">
-                {Number(accessibility.image_count ?? 0) - Number(accessibility.images_missing_alt_count ?? 0)} of{" "}
-                {String(accessibility.image_count ?? 0)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs uppercase tracking-wide text-muted-foreground">Form fields with labels</dt>
-              <dd className="mt-0.5">
-                {Number(accessibility.labelable_field_count ?? 0) -
-                  Number(accessibility.fields_missing_labels_count ?? 0)}{" "}
-                of {String(accessibility.labelable_field_count ?? 0)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs uppercase tracking-wide text-muted-foreground">Overlay widget</dt>
-              <dd className="mt-0.5">{String(accessibility.overlay_widget_vendor ?? "None detected")}</dd>
-            </div>
+            {(() => {
+              const missingAlt = Number(accessibility.images_missing_alt_count ?? 0);
+              const missingLabels = Number(accessibility.fields_missing_labels_count ?? 0);
+              return (
+                <>
+                  <div>
+                    <dt className="text-xs uppercase tracking-wide text-muted-foreground">Images with alt text</dt>
+                    <dd className="mt-0.5">
+                      {Number(accessibility.image_count ?? 0) - missingAlt} of{" "}
+                      {String(accessibility.image_count ?? 0)}
+                      {missingAlt > 0 && (
+                        <span className="ml-1.5 text-red-600">
+                          — {missingAlt} missing, needs to be fixed
+                        </span>
+                      )}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs uppercase tracking-wide text-muted-foreground">Form fields with labels</dt>
+                    <dd className="mt-0.5">
+                      {Number(accessibility.labelable_field_count ?? 0) - missingLabels} of{" "}
+                      {String(accessibility.labelable_field_count ?? 0)}
+                      {missingLabels > 0 && (
+                        <span className="ml-1.5 text-red-600">
+                          — {missingLabels} missing, needs to be fixed
+                        </span>
+                      )}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs uppercase tracking-wide text-muted-foreground">Overlay widget</dt>
+                    <dd className="mt-0.5">{String(accessibility.overlay_widget_vendor ?? "None detected")}</dd>
+                  </div>
+                </>
+              );
+            })()}
           </dl>
         )}
       </CardContent>

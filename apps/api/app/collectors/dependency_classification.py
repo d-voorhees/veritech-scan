@@ -90,6 +90,9 @@ VENDOR_NAMES: dict[str, str] = {
     "segment.io": "Segment",
     "segment.com": "Segment",
     "plausible.io": "Plausible Analytics",
+    "fonts.googleapis.com": "Google Fonts",
+    "fonts.gstatic.com": "Google Fonts",
+    "cal.com": "Cal.com",
 }
 
 

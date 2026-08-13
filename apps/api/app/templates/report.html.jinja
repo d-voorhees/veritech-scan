@@ -110,10 +110,10 @@
   <div class="meta-item"><div class="label">Info</div><div class="value"><span class="badge badge-info">{{ report.severity_counts.info }}</span></div></div>
 </div>
 
-<h2>Rules engine coverage</h2>
-<p>This scan runs a fixed, deterministic rule catalog against the evidence collected below —
-{{ report.rules_checked.total_count }} rules checked, {{ report.rules_checked.fired_count }} raised a finding.
-Rules that don't appear in the risk register below still ran; they simply found nothing to flag.</p>
+<h2>All checks & findings</h2>
+<p>This scan checked the collected evidence against a fixed set of rules.
+{{ report.rules_checked.total_count }} rules were checked, and {{ report.rules_checked.fired_count }} raised a finding.
+Every rule ran, even the ones that don't appear in the risk register below; those simply found nothing to flag.</p>
 <table class="tech-table">
   <colgroup>
     <col style="width:18%"><col style="width:37%"><col style="width:45%">
@@ -128,7 +128,7 @@ Rules that don't appear in the risk register below still ran; they simply found 
         {% if r.fired %}
           <span class="badge badge-{{ r.severity }}">{{ r.severity }}</span> {{ r.title }}
         {% else %}
-          <span style="color:#5b6472;">No finding raised</span>
+          <span style="color:#5b6472;">OK</span>
         {% endif %}
       </td>
     </tr>
@@ -301,8 +301,10 @@ Rules that don't appear in the risk register below still ran; they simply found 
 <p>A static pass over the rendered homepage — alt text, form labels, and known overlay-widget scripts. Not a substitute for a full manual/automated accessibility audit.</p>
 <table>
   <tbody>
-    <tr><td>Images with alt text</td><td>{{ report.accessibility.image_count - report.accessibility.images_missing_alt_count }} of {{ report.accessibility.image_count }}</td></tr>
-    <tr><td>Form fields with labels</td><td>{{ report.accessibility.labelable_field_count - report.accessibility.fields_missing_labels_count }} of {{ report.accessibility.labelable_field_count }}</td></tr>
+    <tr><td>Images with alt text</td><td>{{ report.accessibility.image_count - report.accessibility.images_missing_alt_count }} of {{ report.accessibility.image_count }}
+      {% if report.accessibility.images_missing_alt_count > 0 %}<span class="badge badge-high">{{ report.accessibility.images_missing_alt_count }} missing — needs fix</span>{% endif %}</td></tr>
+    <tr><td>Form fields with labels</td><td>{{ report.accessibility.labelable_field_count - report.accessibility.fields_missing_labels_count }} of {{ report.accessibility.labelable_field_count }}
+      {% if report.accessibility.fields_missing_labels_count > 0 %}<span class="badge badge-high">{{ report.accessibility.fields_missing_labels_count }} missing — needs fix</span>{% endif %}</td></tr>
     <tr><td>Accessibility overlay widget</td><td>{{ report.accessibility.overlay_widget_vendor or "None detected" }}</td></tr>
   </tbody>
 </table>
@@ -312,7 +314,7 @@ Rules that don't appear in the risk register below still ran; they simply found 
 
 <h2>Third-party dependencies</h2>
 {% if report.third_party_dependencies.domains %}
-<p>{{ report.third_party_dependencies.domains|length }} distinct third-party request domain(s) observed while rendering the homepage.</p>
+<p>{{ report.third_party_dependencies.hostname_count }} distinct third-party request domain(s) observed while rendering the homepage.</p>
 <table class="tech-table">
   <colgroup>
     <col style="width:28%"><col style="width:22%"><col style="width:15%"><col style="width:10%"><col style="width:25%">
@@ -350,10 +352,8 @@ Rules that don't appear in the risk register below still ran; they simply found 
     <tr><td>Accessibility score</td><td>{{ report.performance.desktop.accessibility_score if report.performance.desktop.accessibility_score is not none else "—" }}</td><td>{{ report.performance.mobile.accessibility_score if report.performance.mobile.accessibility_score is not none else "—" }}</td></tr>
     <tr><td>Best practices score</td><td>{{ report.performance.desktop.best_practices_score if report.performance.desktop.best_practices_score is not none else "—" }}</td><td>{{ report.performance.mobile.best_practices_score if report.performance.mobile.best_practices_score is not none else "—" }}</td></tr>
     <tr><td>SEO score</td><td>{{ report.performance.desktop.seo_score if report.performance.desktop.seo_score is not none else "—" }}</td><td>{{ report.performance.mobile.seo_score if report.performance.mobile.seo_score is not none else "—" }}</td></tr>
-    <tr><td>LCP</td><td>{{ report.performance.desktop.lcp_ms }}ms</td><td>{{ report.performance.mobile.lcp_ms }}ms</td></tr>
-    <tr><td>CLS</td><td>{{ report.performance.desktop.cls }}</td><td>{{ report.performance.mobile.cls }}</td></tr>
-    <tr><td>INP</td><td>{{ report.performance.desktop.inp_ms }}ms</td><td>{{ report.performance.mobile.inp_ms }}ms</td></tr>
-    <tr><td>FCP</td><td>{{ report.performance.desktop.fcp_ms }}ms</td><td>{{ report.performance.mobile.fcp_ms }}ms</td></tr>
+    <tr><td>LCP</td><td>{{ "%.3f"|format(report.performance.desktop.lcp_ms) ~ "ms" if report.performance.desktop.lcp_ms is not none else "—" }}</td><td>{{ "%.3f"|format(report.performance.mobile.lcp_ms) ~ "ms" if report.performance.mobile.lcp_ms is not none else "—" }}</td></tr>
+    <tr><td>FCP</td><td>{{ "%.3f"|format(report.performance.desktop.fcp_ms) ~ "ms" if report.performance.desktop.fcp_ms is not none else "—" }}</td><td>{{ "%.3f"|format(report.performance.mobile.fcp_ms) ~ "ms" if report.performance.mobile.fcp_ms is not none else "—" }}</td></tr>
     <tr><td>TTFB</td><td>{{ report.performance.desktop.ttfb_ms }}ms</td><td>{{ report.performance.mobile.ttfb_ms }}ms</td></tr>
   </tbody>
 </table>

@@ -370,17 +370,26 @@ def build_report(db: Session, scan: ScanRequest) -> ReportOut:
         ]
     }
 
-    third_party_dependencies = {
-        "domains": [
-            {
+    third_party_rows: dict[str, dict] = {}
+    for d in third_party_obs:
+        vendor_name = known_vendor_name(d.hostname)
+        key = vendor_name or d.hostname
+        row = third_party_rows.get(key)
+        if row is None:
+            third_party_rows[key] = {
                 "hostname": d.hostname,
-                "vendor_name": known_vendor_name(d.hostname),
+                "vendor_name": vendor_name,
                 "category": d.category,
                 "request_count": d.request_count,
                 "classification_method": d.classification_method,
             }
-            for d in third_party_obs
-        ]
+        else:
+            if d.hostname not in row["hostname"].split(", "):
+                row["hostname"] = ", ".join(sorted({*row["hostname"].split(", "), d.hostname}))
+            row["request_count"] += d.request_count
+    third_party_dependencies = {
+        "domains": sorted(third_party_rows.values(), key=lambda r: r["request_count"], reverse=True),
+        "hostname_count": len(third_party_obs),
     }
 
     performance = {}

@@ -19,6 +19,7 @@ const ACTIVE_STATUSES = new Set(["queued", "starting", "running"]);
 export default function DashboardPage() {
   useRequireAuth();
   const { data: scans, isLoading } = useQuery({ queryKey: ["scans", "mine"], queryFn: api.listScans });
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   const recent = (scans ?? []).slice(0, 8);
   const inProgress = (scans ?? []).filter((s) => s.status === "queued" || s.status === "running");
@@ -71,7 +72,12 @@ export default function DashboardPage() {
           )}
           <ul className="divide-y divide-border">
             {recent.map((scan) => (
-              <li key={scan.id} className="group relative flex items-center justify-between px-5 py-3 text-sm hover:bg-muted">
+              <li
+                key={scan.id}
+                className={`group relative flex items-center justify-between px-5 py-3 text-sm hover:bg-muted ${
+                  openMenuId === scan.id ? "z-20" : ""
+                }`}
+              >
                 <Link
                   href={`/scans/${scan.id}`}
                   className="absolute inset-0 z-0"
@@ -86,7 +92,13 @@ export default function DashboardPage() {
                 </div>
                 <div className="relative z-10 flex items-center gap-2">
                   <ScanStatusBadge status={scan.status} />
-                  {!ACTIVE_STATUSES.has(scan.status) && <ScanRowMenu scan={scan} />}
+                  {!ACTIVE_STATUSES.has(scan.status) && (
+                    <ScanRowMenu
+                      scan={scan}
+                      open={openMenuId === scan.id}
+                      onOpenChange={(v) => setOpenMenuId(v ? scan.id : null)}
+                    />
+                  )}
                 </div>
               </li>
             ))}
@@ -97,8 +109,15 @@ export default function DashboardPage() {
   );
 }
 
-function ScanRowMenu({ scan }: { scan: ScanSummary }) {
-  const [open, setOpen] = useState(false);
+function ScanRowMenu({
+  scan,
+  open,
+  onOpenChange,
+}: {
+  scan: ScanSummary;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const menuRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
@@ -112,11 +131,11 @@ function ScanRowMenu({ scan }: { scan: ScanSummary }) {
   useEffect(() => {
     if (!open) return;
     const onClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setOpen(false);
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) onOpenChange(false);
     };
     document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
-  }, [open]);
+  }, [open, onOpenChange]);
 
   return (
     <div ref={menuRef} className="relative">
@@ -124,13 +143,13 @@ function ScanRowMenu({ scan }: { scan: ScanSummary }) {
         type="button"
         title="Scan options"
         aria-label="Scan options"
-        className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-border hover:text-foreground"
-        onClick={() => setOpen((v) => !v)}
+        className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-border hover:text-foreground"
+        onClick={() => onOpenChange(!open)}
       >
         <MoreVertical className="h-4 w-4" />
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-1 w-40 rounded-md border border-border bg-surface py-1 shadow-md">
+        <div className="absolute right-0 top-full z-30 mt-1 w-40 rounded-md border border-border bg-surface py-1 shadow-md">
           <button
             type="button"
             disabled={deleteMutation.isPending}
@@ -139,7 +158,7 @@ function ScanRowMenu({ scan }: { scan: ScanSummary }) {
               if (window.confirm(`Delete the scan for ${scan.normalized_domain}? This cannot be undone.`)) {
                 deleteMutation.mutate();
               }
-              setOpen(false);
+              onOpenChange(false);
             }}
           >
             <Trash2 className="h-3.5 w-3.5" />
