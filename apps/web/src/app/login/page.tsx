@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,10 +10,12 @@ import { ApiError } from "@/lib/api";
 import { productConfig } from "@/lib/config";
 import { useLogin } from "@/lib/use-auth";
 
-export default function LoginPage() {
+function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const login = useLogin();
+  const searchParams = useSearchParams();
+  const sessionExpired = searchParams.get("session") === "expired";
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -25,6 +28,11 @@ export default function LoginPage() {
           <CardDescription>Invite-only access. Sign in with your account.</CardDescription>
         </CardHeader>
         <CardContent>
+          {sessionExpired && (
+            <div className="mb-4 border border-border bg-muted px-3 py-2 text-sm text-foreground">
+              You have been logged out.
+            </div>
+          )}
           <form
             className="flex flex-col gap-4"
             onSubmit={(e) => {
@@ -66,5 +74,13 @@ export default function LoginPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   );
 }

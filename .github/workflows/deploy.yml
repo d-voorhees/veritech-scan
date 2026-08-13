@@ -1,0 +1,95 @@
+name: Deploy
+
+# Pushes to main run the full test suite, then deploy to Fly.io only if it
+# passes. Migrations are deliberately NOT run here — see README.md's
+# "Migrations" section. After a deploy that changes the schema, run
+# `make fly-migrate` by hand.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: veritech_scan
+          POSTGRES_PASSWORD: test-password
+          POSTGRES_DB: veritech_scan_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+psycopg://veritech_scan:test-password@localhost:5432/veritech_scan_test
+      JWT_SECRET: ci-test-secret-do-not-use-in-production
+      INITIAL_ADMIN_EMAIL: admin@example.com
+      INITIAL_ADMIN_PASSWORD: test-password-123
+      ARTIFACT_STORAGE_LOCAL_PATH: /tmp/veritech-scan-test-artifacts
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install backend dependencies
+        working-directory: apps/api
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          playwright install --with-deps chromium
+
+      - name: Lint backend
+        working-directory: apps/api
+        run: |
+          python -m ruff check app
+          python -m mypy app --ignore-missing-imports || true
+
+      - name: Backend tests
+        run: python -m pytest -q
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: apps/web
+        run: npm ci
+
+      - name: Lint frontend
+        working-directory: apps/web
+        run: npm run lint
+
+      - name: Typecheck frontend
+        working-directory: apps/web
+        run: npm run typecheck
+
+      - name: Frontend tests
+        working-directory: apps/web
+        run: npm run test --if-present
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Deploy to Fly.io
+        run: flyctl deploy --remote-only --app veritech-scan
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

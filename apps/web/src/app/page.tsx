@@ -272,19 +272,21 @@ export default function HomePage() {
       <header className="hero">
         <div className="outer">
           <div className="hero-inner">
-            <p className="eyebrow">Veritech Scan — a product of Veritech Diligence</p>
-            <h1>A first technical read, before you spend real diligence time.</h1>
+            <p className="eyebrow">Veritech Scan — an automated tool from Veritech Diligence</p>
+            <h1>An automated first technical read, before you spend real diligence time.</h1>
             <p className="standfirst">
-              Enter the domain you&rsquo;re evaluating. Scan checks what&rsquo;s already public, DNS posture,
-              redirects, third-party dependencies, and the technology behind the site, then returns a risk register
-              where every finding links back to the exact evidence behind it.
+              Enter the domain you&rsquo;re evaluating. Scan automatically checks what&rsquo;s already public, DNS
+              posture, redirects, third-party dependencies, and the technology behind the site, then returns a risk
+              register where every finding links back to the exact evidence behind it. No analyst sits between you
+              and the result.
             </p>
 
             <div className="differentiator">
               <p className="eyebrow">Why it&rsquo;s different</p>
               <p>
-                Twelve deterministic rules turn collected evidence into scored findings. No model is guessing at
-                what it found, and nothing is presented as more certain than the evidence supports.
+                Twelve deterministic rules, applied automatically, turn collected evidence into scored findings. No
+                model is guessing at what it found, and nothing is presented as more certain than the evidence
+                supports.
               </p>
             </div>
 
@@ -316,7 +318,7 @@ export default function HomePage() {
                 reads what&rsquo;s already public: the DNS records, the response headers, the homepage as
                 rendered, the dependencies it loads.
               </p>
-              <p>In minutes, not days, you get a prioritized answer to what&rsquo;s solid, what needs a closer look, and what should stop you before you go further.</p>
+              <p>Run automatically, in minutes rather than days, it gives you a prioritized answer to what&rsquo;s solid, what needs a closer look, and what should stop you before you go further.</p>
             </div>
           </div>
         </div>
@@ -406,9 +408,10 @@ export default function HomePage() {
               <p className="eyebrow">What Scan does not do</p>
               <h2>A boundary, stated plainly.</h2>
               <p>
-                Scan only reads what&rsquo;s already public. It does not attempt to log in, test credentials,
-                bypass access controls, or confirm a vulnerability by exploiting it. Where it flags something that
-                could be a security gap, the report labels it as an observation, not a confirmed compromise.
+                Scan is fully automated and stays within a fixed boundary: it only reads what&rsquo;s already
+                public. It does not attempt to log in, test credentials, bypass access controls, or confirm a
+                vulnerability by exploiting it. Where it flags something that could be a security gap, the report
+                labels it as an observation, not a confirmed compromise.
               </p>
               <p>Scan gives you a first read. It does not replace the full nine-layer technical review once a target is worth pursuing further.</p>
             </div>

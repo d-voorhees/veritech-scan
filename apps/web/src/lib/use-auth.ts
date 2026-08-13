@@ -19,7 +19,7 @@ export function useRequireAuth() {
   const query = useMe();
 
   if (query.isError && query.error instanceof ApiError && query.error.status === 401) {
-    if (typeof window !== "undefined") router.replace("/login");
+    if (typeof window !== "undefined") router.replace("/login?session=expired");
   }
 
   return query;
