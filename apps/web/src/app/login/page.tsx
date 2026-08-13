@@ -15,13 +15,13 @@ export default function LoginPage() {
   const login = useLogin();
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            {productConfig.parentBrand}
-          </div>
-          <CardTitle className="text-lg">{productConfig.productName}</CardTitle>
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <Card className="w-full max-w-sm border-t-2 border-t-primary">
+        <CardHeader className="gap-2 pb-5 pt-6">
+          <div className="eyebrow text-primary">{productConfig.parentBrand}</div>
+          <CardTitle className="font-serif text-2xl font-normal italic tracking-tight text-foreground">
+            {productConfig.productName}
+          </CardTitle>
           <CardDescription>Invite-only access. Sign in with your account.</CardDescription>
         </CardHeader>
         <CardContent>

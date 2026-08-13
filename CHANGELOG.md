@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+### Added
+
+- **Public marketing homepage and brand styling.** `/` now renders a
+  Veritech Diligence-branded landing page (hero, product explanation, check
+  categories, access section) with "Sign in" and "Request access" calls to
+  action; the authenticated dashboard moved to `/dashboard`. The login page
+  and dashboard were restyled to match veritechdiligence.com's type and
+  color system (Inter / JetBrains Mono / Linden Hill, ink/paper/parchment/
+  navy palette, sharp corners).
+
 ### Changed
 
 - **Replaced the Oracle Cloud/systemd/Caddy/Dramatiq+Redis deployment with

@@ -32,7 +32,7 @@ export function useLogin() {
     mutationFn: ({ email, password }: { email: string; password: string }) => api.login(email, password),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["me"] });
-      router.push("/");
+      router.push("/dashboard");
     },
   });
 }

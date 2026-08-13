@@ -17,6 +17,10 @@ It answers one practical question for a prospective buyer:
 
 ## MVP scope
 
+- A public marketing homepage at `/`, branded to match
+  [veritechdiligence.com](https://veritechdiligence.com) (type, color,
+  layout), with "Sign in" and "Request access" calls to action. The
+  authenticated app lives at `/dashboard`.
 - Invite-only, authenticated app (no public signup).
 - Submit a domain/URL + business notes + crawl depth (10/25/50 pages) +
   a required authorization acknowledgment.
