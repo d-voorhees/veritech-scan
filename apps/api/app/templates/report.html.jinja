@@ -38,6 +38,10 @@
   .crawl-table col.col-title { width: 28%; }
   .crawl-table col.col-canonical { width: 15%; }
   .crawl-table col.col-h1 { width: 15%; }
+  .tech-table { table-layout: fixed; }
+  .tech-table col.col-tech { width: 30%; }
+  .tech-table col.col-method { width: 50%; }
+  .tech-table col.col-confidence { width: 20%; }
   .finding { border: 1px solid #d9dde3; border-radius: 8px; padding: 0.9rem 1rem; margin-bottom: 0.75rem; page-break-inside: avoid; }
   .finding-title-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
   .finding-title { font-weight: 600; font-size: 0.95rem; }
@@ -94,6 +98,32 @@
   <div class="meta-item"><div class="label">Info</div><div class="value"><span class="badge badge-info">{{ report.severity_counts.info }}</span></div></div>
 </div>
 
+<h2>Rules engine coverage</h2>
+<p>This scan runs a fixed, deterministic rule catalog against the evidence collected below —
+{{ report.rules_checked.total_count }} rules checked, {{ report.rules_checked.fired_count }} raised a finding.
+Rules that don't appear in the risk register below still ran; they simply found nothing to flag.</p>
+<table class="tech-table">
+  <colgroup>
+    <col style="width:18%"><col style="width:37%"><col style="width:45%">
+  </colgroup>
+  <thead><tr><th>Category</th><th>Check</th><th>Outcome</th></tr></thead>
+  <tbody>
+  {% for r in report.rules_checked.rules %}
+    <tr>
+      <td>{{ r.category|replace("_", " ") }}</td>
+      <td>{{ r.check }}</td>
+      <td>
+        {% if r.fired %}
+          <span class="badge badge-{{ r.severity }}">{{ r.severity }}</span> {{ r.title }}
+        {% else %}
+          <span style="color:#5b6472;">No finding raised</span>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
 <h2>Prioritized risk register</h2>
 {% if report.findings %}
   {% for f in report.findings %}
@@ -135,6 +165,13 @@
   {% if report.dns_email.dmarc %}
     <tr><td>DMARC</td><td>{{ report.dns_email.dmarc.record or "not present" }} {% if report.dns_email.dmarc.policy %}(policy: {{ report.dns_email.dmarc.policy }}){% endif %}</td></tr>
   {% endif %}
+    <tr><td>DKIM</td><td>
+      {% if report.dns_email.dkim_selectors_found %}
+        found under selector{{ "s" if report.dns_email.dkim_selectors_found|length > 1 else "" }}: {{ report.dns_email.dkim_selectors_found|join(", ") }}
+      {% else %}
+        not found under any of {{ report.dns_email.dkim_probed_count }} commonly probed selectors (not proof of absence — a custom selector would not be detected)
+      {% endif %}
+    </td></tr>
   </tbody>
 </table>
 
@@ -171,11 +208,58 @@
   </tbody>
 </table>
 
+{% set sc = report.crawl_indexability.sitemap_check %}
+<h3 style="font-size:0.85rem; text-transform:uppercase; letter-spacing:0.04em; color:#5b6472; margin:1.25rem 0 0.4rem;">Checked against robots.txt and sitemap</h3>
+<table>
+  <tbody>
+    <tr><td>Sitemap URLs declared</td><td>{{ sc.sitemap_declared_count }} URL(s) across {{ sc.sitemap_file_count }} sitemap file(s)</td></tr>
+    <tr><td>Robots.txt Disallow rules (User-agent: *)</td><td>{% if sc.disallow_rules %}{{ sc.disallow_rules|join(", ") }}{% else %}none{% endif %}</td></tr>
+  </tbody>
+</table>
+
+<p style="margin-top:1rem;"><strong>Crawled but not declared in sitemap</strong> ({{ sc.crawled_not_in_sitemap_count }})<br>
+<span style="color:#5b6472; font-size:0.8rem;">Pages this scan reached that the sitemap doesn't list — often fine (new content, legal pages), but worth confirming they're intentional.</span></p>
+{% if sc.crawled_not_in_sitemap_sample %}
+<ul style="font-size:0.85rem;">
+  {% for u in sc.crawled_not_in_sitemap_sample %}<li>{{ u }}</li>{% endfor %}
+  {% if sc.crawled_not_in_sitemap_count > sc.crawled_not_in_sitemap_sample|length %}<li>… and {{ sc.crawled_not_in_sitemap_count - sc.crawled_not_in_sitemap_sample|length }} more</li>{% endif %}
+</ul>
+{% else %}
+<p class="empty-note">None — every reachable page this scan crawled is also declared in the sitemap.</p>
+{% endif %}
+
+<p style="margin-top:1rem;"><strong>Declared in sitemap but not reached by this crawl</strong> ({{ sc.sitemap_not_crawled_count }})<br>
+<span style="color:#5b6472; font-size:0.8rem;">This scan is bounded to {{ report.max_pages }} pages, so this may just reflect that budget rather than a site defect.</span></p>
+{% if sc.sitemap_not_crawled_sample %}
+<ul style="font-size:0.85rem;">
+  {% for u in sc.sitemap_not_crawled_sample %}<li>{{ u }}</li>{% endfor %}
+  {% if sc.sitemap_not_crawled_count > sc.sitemap_not_crawled_sample|length %}<li>… and {{ sc.sitemap_not_crawled_count - sc.sitemap_not_crawled_sample|length }} more</li>{% endif %}
+</ul>
+{% else %}
+<p class="empty-note">None — every sitemap URL within this comparison was reached by the crawl.</p>
+{% endif %}
+
+{% if sc.disallow_rules %}
+<p style="margin-top:1rem;"><strong>Crawled despite matching a robots.txt Disallow rule</strong> ({{ sc.crawled_but_disallowed_count }})<br>
+<span style="color:#5b6472; font-size:0.8rem;">Informational only — this scan does not enforce robots.txt, so this shows where the site's stated crawl preferences and its actual reachable content diverge.</span></p>
+{% if sc.crawled_but_disallowed_sample %}
+<ul style="font-size:0.85rem;">
+  {% for u in sc.crawled_but_disallowed_sample %}<li>{{ u }}</li>{% endfor %}
+  {% if sc.crawled_but_disallowed_count > sc.crawled_but_disallowed_sample|length %}<li>… and {{ sc.crawled_but_disallowed_count - sc.crawled_but_disallowed_sample|length }} more</li>{% endif %}
+</ul>
+{% else %}
+<p class="empty-note">None — no crawled page matched a Disallow rule.</p>
+{% endif %}
+{% endif %}
+
 <h2>Technology and dependencies</h2>
 {% if report.technology.technologies %}
 {% for category, techs in report.technology.technologies|groupby('category') %}
 <h3 style="font-size:0.85rem; text-transform:uppercase; letter-spacing:0.04em; color:#5b6472; margin:1.25rem 0 0.4rem;">{{ category|replace("_", " ") }}</h3>
-<table>
+<table class="tech-table">
+  <colgroup>
+    <col class="col-tech"><col class="col-method"><col class="col-confidence">
+  </colgroup>
   <thead><tr><th>Technology</th><th>Detection method</th><th>Confidence</th></tr></thead>
   <tbody>
   {% for t in techs %}
@@ -188,7 +272,25 @@
 <p class="empty-note">No technologies were positively identified by local rules-based detection.</p>
 {% endif %}
 
-<h2>Performance</h2>
+<h2>Third-party dependencies</h2>
+{% if report.third_party_dependencies.domains %}
+<p>{{ report.third_party_dependencies.domains|length }} distinct third-party request domain(s) observed while rendering the homepage.</p>
+<table class="tech-table">
+  <colgroup>
+    <col style="width:28%"><col style="width:22%"><col style="width:15%"><col style="width:10%"><col style="width:25%">
+  </colgroup>
+  <thead><tr><th>Hostname</th><th>Vendor</th><th>Category</th><th>Requests</th><th>Classification method</th></tr></thead>
+  <tbody>
+  {% for d in report.third_party_dependencies.domains %}
+    <tr><td>{{ d.hostname }}</td><td>{{ d.vendor_name or "—" }}</td><td>{{ d.category|replace("_", " ") }}</td><td>{{ d.request_count }}</td><td>{{ d.classification_method }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty-note">No third-party request domains were observed while rendering the homepage.</p>
+{% endif %}
+
+<h2>Page speed performance</h2>
 {% if report.performance %}
 <table>
   <tbody>
@@ -197,12 +299,27 @@
     <tr><td>HTML payload size</td><td>{{ report.performance.html_bytes }} bytes</td></tr>
     <tr><td>Third-party domains</td><td>{{ report.performance.third_party_domain_count }}</td></tr>
     <tr><td>JS resource requests</td><td>{{ report.performance.js_resource_count }}</td></tr>
-    {% if report.performance.performance_score is not none %}
-    <tr><td>PageSpeed performance score</td><td>{{ report.performance.performance_score }}</td></tr>
-    <tr><td>LCP / CLS / INP / FCP / TTFB</td><td>{{ report.performance.lcp_ms }}ms / {{ report.performance.cls }} / {{ report.performance.inp_ms }}ms / {{ report.performance.fcp_ms }}ms / {{ report.performance.ttfb_ms }}ms</td></tr>
-    {% endif %}
   </tbody>
 </table>
+{% if report.performance.configured %}
+<table class="tech-table">
+  <colgroup>
+    <col style="width:40%"><col style="width:30%"><col style="width:30%">
+  </colgroup>
+  <thead><tr><th>Google PageSpeed Insights</th><th>Desktop</th><th>Mobile</th></tr></thead>
+  <tbody>
+    <tr><td>Performance score</td><td>{{ report.performance.desktop.performance_score if report.performance.desktop.performance_score is not none else "—" }}</td><td>{{ report.performance.mobile.performance_score if report.performance.mobile.performance_score is not none else "—" }}</td></tr>
+    <tr><td>Accessibility score</td><td>{{ report.performance.desktop.accessibility_score if report.performance.desktop.accessibility_score is not none else "—" }}</td><td>{{ report.performance.mobile.accessibility_score if report.performance.mobile.accessibility_score is not none else "—" }}</td></tr>
+    <tr><td>Best practices score</td><td>{{ report.performance.desktop.best_practices_score if report.performance.desktop.best_practices_score is not none else "—" }}</td><td>{{ report.performance.mobile.best_practices_score if report.performance.mobile.best_practices_score is not none else "—" }}</td></tr>
+    <tr><td>SEO score</td><td>{{ report.performance.desktop.seo_score if report.performance.desktop.seo_score is not none else "—" }}</td><td>{{ report.performance.mobile.seo_score if report.performance.mobile.seo_score is not none else "—" }}</td></tr>
+    <tr><td>LCP</td><td>{{ report.performance.desktop.lcp_ms }}ms</td><td>{{ report.performance.mobile.lcp_ms }}ms</td></tr>
+    <tr><td>CLS</td><td>{{ report.performance.desktop.cls }}</td><td>{{ report.performance.mobile.cls }}</td></tr>
+    <tr><td>INP</td><td>{{ report.performance.desktop.inp_ms }}ms</td><td>{{ report.performance.mobile.inp_ms }}ms</td></tr>
+    <tr><td>FCP</td><td>{{ report.performance.desktop.fcp_ms }}ms</td><td>{{ report.performance.mobile.fcp_ms }}ms</td></tr>
+    <tr><td>TTFB</td><td>{{ report.performance.desktop.ttfb_ms }}ms</td><td>{{ report.performance.mobile.ttfb_ms }}ms</td></tr>
+  </tbody>
+</table>
+{% endif %}
 {% else %}
 <p class="empty-note">No performance observation was recorded.</p>
 {% endif %}

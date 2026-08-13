@@ -34,6 +34,73 @@ CATEGORY_PATTERNS: dict[str, list[str]] = {
     "forms_marketing": ["hubspot.com", "hs-scripts.com", "hsforms.com", "mailchimp.com"],
 }
 
+# Human-readable vendor names for well-known hostnames, so a report reader sees
+# "Meta Pixel" or "Google Tag Manager" instead of having to recognize the raw
+# hostname themselves. Not every third-party hostname will have an entry here —
+# unmatched hostnames are still reported, just without a friendly name.
+VENDOR_NAMES: dict[str, str] = {
+    "google-analytics.com": "Google Analytics",
+    "analytics.google.com": "Google Analytics",
+    "googletagmanager.com": "Google Tag Manager",
+    "doubleclick.net": "Google Ads (DoubleClick)",
+    "googlesyndication.com": "Google AdSense",
+    "googleadservices.com": "Google Ads Conversion Tracking",
+    "connect.facebook.net": "Meta Pixel",
+    "facebook.net": "Meta Pixel",
+    "ads-twitter.com": "Twitter/X Ads",
+    "criteo.com": "Criteo",
+    "taboola.com": "Taboola",
+    "outbrain.com": "Outbrain",
+    "js.stripe.com": "Stripe",
+    "stripe.com": "Stripe",
+    "paypal.com": "PayPal",
+    "paypalobjects.com": "PayPal",
+    "squareup.com": "Square",
+    "widget.intercom.io": "Intercom",
+    "intercom.io": "Intercom",
+    "drift.com": "Drift",
+    "zdassets.com": "Zendesk",
+    "zendesk.com": "Zendesk",
+    "livechatinc.com": "LiveChat",
+    "crisp.chat": "Crisp",
+    "tawk.to": "Tawk.to",
+    "helpscout": "Help Scout",
+    "cloudflare.com": "Cloudflare",
+    "cdn.jsdelivr.net": "jsDelivr CDN",
+    "unpkg.com": "unpkg CDN",
+    "cdnjs.cloudflare.com": "cdnjs CDN",
+    "fastly.net": "Fastly CDN",
+    "cloudfront.net": "Amazon CloudFront",
+    "platform.twitter.com": "Twitter/X embed",
+    "instagram.com": "Instagram embed",
+    "youtube.com": "YouTube embed",
+    "player.vimeo.com": "Vimeo embed",
+    "linkedin.com": "LinkedIn embed",
+    "cdn.shopify.com": "Shopify",
+    "shopify.com": "Shopify",
+    "hs-scripts.com": "HubSpot",
+    "hsforms.com": "HubSpot",
+    "hubspot.com": "HubSpot",
+    "list-manage.com": "Mailchimp",
+    "chimpstatic.com": "Mailchimp",
+    "mailchimp.com": "Mailchimp",
+    "hotjar.com": "Hotjar",
+    "mixpanel.com": "Mixpanel",
+    "amplitude.com": "Amplitude",
+    "segment.io": "Segment",
+    "segment.com": "Segment",
+    "plausible.io": "Plausible Analytics",
+}
+
+
+def known_vendor_name(hostname: str) -> str | None:
+    """Best-effort friendly vendor name for a hostname, or None if unrecognized."""
+    lowered = hostname.lower()
+    for pattern, name in VENDOR_NAMES.items():
+        if pattern in lowered:
+            return name
+    return None
+
 
 def classify_hostname(hostname: str) -> tuple[str, str]:
     """Returns (category, detection_method)."""

@@ -130,17 +130,18 @@ Veritech Scan does **not**:
 - Bypass authentication, access controls, or CAPTCHAs.
 - Submit forms or otherwise mutate state on the target.
 - Implement full `robots.txt` enforcement — it *records* `robots.txt` as
-  evidence (see `app/collectors/robots_sitemap.py`) and the generated report
-  explicitly states this limitation, but it does not currently gate crawl
-  behavior on `Disallow` rules. This is a known, documented limitation
-  suitable for the bounded-evidence MVP, not a security control.
+  evidence (see `app/collectors/robots_sitemap.py`) and does not gate crawl
+  behavior on `Disallow` rules. The generated report does separately
+  cross-reference the crawled page set against `Disallow` rules and the
+  declared sitemap (informational only, plain prefix matching against
+  `User-agent: *` — no wildcard/end-anchor support), but this is not
+  enforcement. This is a known, documented limitation suitable for the
+  bounded-evidence MVP, not a security control.
 - Verify the authorization attestation technically (e.g. via a DNS TXT
   record or file challenge). The MVP relies on the user's self-attestation,
   logged with a timestamp, plus the product being invite-only. A stronger
   domain-ownership proof (DNS/file-based, similar to ACME challenges) is a
   natural post-MVP hardening step — see `docs/security-hardening.md`.
-- Implement DKIM discovery (SPF and DMARC only in the MVP; see
-  `docs/rules-engine.md` for the documented extension point).
 - Provide high availability or automatic failover for the database — a
   single Postgres instance is the one persistent, paid dependency of this
   architecture (see `docs/fly-deployment.md`).

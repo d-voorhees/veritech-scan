@@ -148,10 +148,12 @@ export interface ReportOut {
   is_demo: boolean;
   severity_counts: { high: number; medium: number; low: number; info: number };
   findings: Finding[];
+  rules_checked: { total_count: number; fired_count: number; rules: Array<Record<string, unknown>> };
   dns_email: Record<string, unknown>;
   http_security: Record<string, unknown>;
   crawl_indexability: Record<string, unknown>;
   technology: { technologies: Array<Record<string, unknown>> };
+  third_party_dependencies: { domains: Array<Record<string, unknown>> };
   performance: Record<string, unknown>;
   limitations: Array<{ task_name: string; message: string }>;
   generated_at: string;

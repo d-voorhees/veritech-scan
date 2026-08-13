@@ -24,6 +24,9 @@ class RuleContext:
     def dns_by_type(self, record_type: str) -> DNSObservation | None:
         return next((o for o in self.dns_observations if o.record_type == record_type), None)
 
+    def dns_all_by_type(self, record_type: str) -> list[DNSObservation]:
+        return [o for o in self.dns_observations if o.record_type == record_type]
+
 
 def build_rule_context(db: Session, scan: ScanRequest) -> RuleContext:
     dns_observations = (

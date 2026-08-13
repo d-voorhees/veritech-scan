@@ -141,6 +141,8 @@ export default function ScanDetailPage({ params }: { params: Promise<{ scanId: s
             </CardContent>
           </Card>
 
+          <RulesCoverageSection rulesChecked={report.rules_checked} />
+
           <Card className="mt-6">
             <CardHeader>
               <CardTitle>Prioritized risk register</CardTitle>
@@ -187,8 +189,9 @@ export default function ScanDetailPage({ params }: { params: Promise<{ scanId: s
 
           <DnsSection dnsEmail={report.dns_email} />
           <HttpSection httpSecurity={report.http_security} />
-          <CrawlSection crawl={report.crawl_indexability} />
+          <CrawlSection crawl={report.crawl_indexability} maxPages={scan.max_pages} />
           <TechnologySection technology={report.technology} />
+          <ThirdPartyDependenciesSection thirdPartyDependencies={report.third_party_dependencies} />
           <PerformanceSection performance={report.performance} />
 
           <Card className="mt-6">
@@ -239,6 +242,54 @@ function SeverityTile({
   );
 }
 
+function RulesCoverageSection({
+  rulesChecked,
+}: {
+  rulesChecked: { total_count: number; fired_count: number; rules: Array<Record<string, unknown>> };
+}) {
+  const rules = rulesChecked.rules ?? [];
+  return (
+    <Card className="mt-6">
+      <CardHeader>
+        <CardTitle>Rules engine coverage</CardTitle>
+        <CardDescription>
+          {rulesChecked.total_count} rules checked, {rulesChecked.fired_count} raised a finding. Rules that don&rsquo;t
+          appear in the risk register below still ran — they simply found nothing to flag.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="p-0">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <th className="px-5 py-2 font-medium">Category</th>
+              <th className="px-5 py-2 font-medium">Check</th>
+              <th className="px-5 py-2 font-medium">Outcome</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {rules.map((r) => (
+              <tr key={String(r.rule_key)}>
+                <td className="px-5 py-2 text-muted-foreground">{String(r.category).replace(/_/g, " ")}</td>
+                <td className="px-5 py-2">{String(r.check)}</td>
+                <td className="px-5 py-2">
+                  {r.fired ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Badge variant={severityToVariant(String(r.severity))}>{String(r.severity)}</Badge>
+                      {String(r.title)}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">No finding raised</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </CardContent>
+    </Card>
+  );
+}
+
 function TaskStatusIcon({ status }: { status: string }) {
   if (status === "succeeded") return <CheckCircle2 className="h-4 w-4 text-emerald-600" />;
   if (status === "failed") return <XCircle className="h-4 w-4 text-red-600" />;
@@ -249,13 +300,15 @@ function TaskStatusIcon({ status }: { status: string }) {
 function DnsSection({ dnsEmail }: { dnsEmail: Record<string, unknown> }) {
   const spf = dnsEmail.spf as { record?: string | null } | null;
   const dmarc = dnsEmail.dmarc as { record?: string | null; policy?: string | null } | null;
+  const dkimSelectorsFound = (dnsEmail.dkim_selectors_found as string[] | undefined) ?? [];
+  const dkimProbedCount = Number(dnsEmail.dkim_probed_count ?? 0);
   return (
     <Card className="mt-6">
       <CardHeader>
         <CardTitle>DNS and email posture</CardTitle>
       </CardHeader>
       <CardContent>
-        <dl className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
+        <dl className="grid grid-cols-1 gap-3 text-sm md:grid-cols-3">
           <div>
             <dt className="text-xs uppercase tracking-wide text-muted-foreground">SPF</dt>
             <dd className="mt-0.5 break-words">{spf?.record ?? "Not present"}</dd>
@@ -267,7 +320,61 @@ function DnsSection({ dnsEmail }: { dnsEmail: Record<string, unknown> }) {
               {dmarc?.policy ? ` (policy: ${dmarc.policy})` : ""}
             </dd>
           </div>
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-muted-foreground">DKIM</dt>
+            <dd className="mt-0.5 break-words">
+              {dkimSelectorsFound.length > 0
+                ? `Found under selector${dkimSelectorsFound.length > 1 ? "s" : ""}: ${dkimSelectorsFound.join(", ")}`
+                : `Not found under ${dkimProbedCount} commonly probed selectors (not proof of absence)`}
+            </dd>
+          </div>
         </dl>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ThirdPartyDependenciesSection({
+  thirdPartyDependencies,
+}: {
+  thirdPartyDependencies: { domains: Array<Record<string, unknown>> };
+}) {
+  const domains = thirdPartyDependencies.domains ?? [];
+  return (
+    <Card className="mt-6">
+      <CardHeader>
+        <CardTitle>Third-party dependencies</CardTitle>
+        <CardDescription>
+          {domains.length} distinct third-party request domain(s) observed while rendering the homepage.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {domains.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No third-party request domains were observed.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <th className="py-1 pr-4 font-medium">Hostname</th>
+                  <th className="py-1 pr-4 font-medium">Vendor</th>
+                  <th className="py-1 pr-4 font-medium">Category</th>
+                  <th className="py-1 font-medium">Requests</th>
+                </tr>
+              </thead>
+              <tbody>
+                {domains.map((d) => (
+                  <tr key={String(d.hostname)} className="border-t">
+                    <td className="py-1 pr-4 break-all">{String(d.hostname)}</td>
+                    <td className="py-1 pr-4">{String(d.vendor_name ?? "—")}</td>
+                    <td className="py-1 pr-4">{String(d.category ?? "—").replace(/_/g, " ")}</td>
+                    <td className="py-1">{String(d.request_count ?? "—")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -302,8 +409,43 @@ function HttpSection({ httpSecurity }: { httpSecurity: Record<string, unknown> }
   );
 }
 
-function CrawlSection({ crawl }: { crawl: Record<string, unknown> }) {
+function UrlSampleList({
+  title,
+  note,
+  count,
+  sample,
+}: {
+  title: string;
+  note: string;
+  count: number;
+  sample: string[];
+}) {
+  return (
+    <div className="mt-4">
+      <p className="text-sm font-medium">
+        {title} ({count})
+      </p>
+      <p className="text-xs text-muted-foreground">{note}</p>
+      {sample.length === 0 ? (
+        <p className="mt-1 text-sm text-muted-foreground">None.</p>
+      ) : (
+        <ul className="mt-1 list-inside list-disc text-sm">
+          {sample.map((u) => (
+            <li key={u} className="break-all">
+              {u}
+            </li>
+          ))}
+          {count > sample.length && <li className="text-muted-foreground">… and {count - sample.length} more</li>}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function CrawlSection({ crawl, maxPages }: { crawl: Record<string, unknown>; maxPages: number }) {
   const pages = (crawl.pages as Array<Record<string, unknown>>) ?? [];
+  const sc = (crawl.sitemap_check as Record<string, unknown>) ?? {};
+  const disallowRules = (sc.disallow_rules as string[] | undefined) ?? [];
   return (
     <Card className="mt-6">
       <CardHeader>
@@ -334,6 +476,48 @@ function CrawlSection({ crawl }: { crawl: Record<string, unknown> }) {
             ))}
           </tbody>
         </table>
+
+        <div className="border-t border-border px-5 py-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Checked against robots.txt and sitemap
+          </p>
+          <dl className="mt-2 grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted-foreground">Sitemap URLs declared</dt>
+              <dd className="mt-0.5">
+                {String(sc.sitemap_declared_count ?? 0)} URL(s) across {String(sc.sitemap_file_count ?? 0)} sitemap
+                file(s)
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted-foreground">
+                Robots.txt Disallow rules (User-agent: *)
+              </dt>
+              <dd className="mt-0.5 break-words">{disallowRules.length > 0 ? disallowRules.join(", ") : "None"}</dd>
+            </div>
+          </dl>
+
+          <UrlSampleList
+            title="Crawled but not declared in sitemap"
+            note="Pages this scan reached that the sitemap doesn't list — often fine (new content, legal pages), but worth confirming they're intentional."
+            count={Number(sc.crawled_not_in_sitemap_count ?? 0)}
+            sample={(sc.crawled_not_in_sitemap_sample as string[] | undefined) ?? []}
+          />
+          <UrlSampleList
+            title="Declared in sitemap but not reached by this crawl"
+            note={`This scan is bounded to ${maxPages} pages, so this may just reflect that budget rather than a site defect.`}
+            count={Number(sc.sitemap_not_crawled_count ?? 0)}
+            sample={(sc.sitemap_not_crawled_sample as string[] | undefined) ?? []}
+          />
+          {disallowRules.length > 0 && (
+            <UrlSampleList
+              title="Crawled despite matching a robots.txt Disallow rule"
+              note="Informational only — this scan does not enforce robots.txt, so this shows where the site's stated crawl preferences and its actual reachable content diverge."
+              count={Number(sc.crawled_but_disallowed_count ?? 0)}
+              sample={(sc.crawled_but_disallowed_sample as string[] | undefined) ?? []}
+            />
+          )}
+        </div>
       </CardContent>
     </Card>
   );
@@ -385,12 +569,28 @@ function TechnologySection({ technology }: { technology: { technologies: Array<R
   );
 }
 
+type PageSpeedStrategy = {
+  performance_score?: number | null;
+  accessibility_score?: number | null;
+  best_practices_score?: number | null;
+  seo_score?: number | null;
+  lcp_ms?: number | null;
+  cls?: number | null;
+  inp_ms?: number | null;
+  fcp_ms?: number | null;
+  ttfb_ms?: number | null;
+};
+
 function PerformanceSection({ performance }: { performance: Record<string, unknown> }) {
+  const desktop = performance.desktop as PageSpeedStrategy | undefined;
+  const mobile = performance.mobile as PageSpeedStrategy | undefined;
+  const configured = performance.configured !== false;
+
   return (
     <Card className="mt-6">
       <CardHeader>
-        <CardTitle>Performance</CardTitle>
-        {performance.configured === false && (
+        <CardTitle>Page speed performance</CardTitle>
+        {!configured && (
           <CardDescription>Google PageSpeed Insights was not configured; local measurements only.</CardDescription>
         )}
       </CardHeader>
@@ -412,13 +612,42 @@ function PerformanceSection({ performance }: { performance: Record<string, unkno
             <dt className="text-xs uppercase tracking-wide text-muted-foreground">JS requests</dt>
             <dd className="mt-0.5">{String(performance.js_resource_count ?? "—")}</dd>
           </div>
-          {performance.performance_score != null && (
-            <div>
-              <dt className="text-xs uppercase tracking-wide text-muted-foreground">PageSpeed performance</dt>
-              <dd className="mt-0.5">{String(performance.performance_score)}/100</dd>
-            </div>
-          )}
         </dl>
+
+        {configured && desktop && mobile && (
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <th className="py-1 pr-4 font-medium">Google PageSpeed Insights</th>
+                  <th className="py-1 pr-4 font-medium">Desktop</th>
+                  <th className="py-1 font-medium">Mobile</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(
+                  [
+                    ["Performance score", "performance_score", ""],
+                    ["Accessibility score", "accessibility_score", ""],
+                    ["Best practices score", "best_practices_score", ""],
+                    ["SEO score", "seo_score", ""],
+                    ["LCP", "lcp_ms", "ms"],
+                    ["CLS", "cls", ""],
+                    ["INP", "inp_ms", "ms"],
+                    ["FCP", "fcp_ms", "ms"],
+                    ["TTFB", "ttfb_ms", "ms"],
+                  ] as [string, keyof PageSpeedStrategy, string][]
+                ).map(([label, key, unit]) => (
+                  <tr key={key} className="border-t">
+                    <td className="py-1 pr-4">{label}</td>
+                    <td className="py-1 pr-4">{desktop[key] != null ? `${desktop[key]}${unit}` : "—"}</td>
+                    <td className="py-1">{mobile[key] != null ? `${mobile[key]}${unit}` : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

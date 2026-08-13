@@ -54,6 +54,10 @@ class DNSObservation(Base, UUIDMixin, TimestampMixin):
     dmarc_pct: Mapped[str | None] = mapped_column(String(16), nullable=True)
     dmarc_rua: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
+    # DKIM-specific — the selector this record was found under (probed against
+    # a curated list of common ESP selectors; see collectors/dns_checks.py)
+    dkim_selector: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
 
 class TechnologyObservation(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "technology_observations"
@@ -84,16 +88,25 @@ class PerformanceObservation(Base, UUIDMixin, TimestampMixin):
     third_party_domain_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     js_resource_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    lcp_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
-    cls: Mapped[float | None] = mapped_column(Float, nullable=True)
-    inp_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
-    fcp_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
-    ttfb_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    desktop_lcp_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    desktop_cls: Mapped[float | None] = mapped_column(Float, nullable=True)
+    desktop_inp_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    desktop_fcp_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    desktop_ttfb_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    desktop_performance_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    desktop_accessibility_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    desktop_best_practices_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    desktop_seo_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    performance_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    accessibility_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    best_practices_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    seo_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    mobile_lcp_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    mobile_cls: Mapped[float | None] = mapped_column(Float, nullable=True)
+    mobile_inp_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    mobile_fcp_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    mobile_ttfb_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    mobile_performance_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    mobile_accessibility_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    mobile_best_practices_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    mobile_seo_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class ThirdPartyDependency(Base, UUIDMixin, TimestampMixin):

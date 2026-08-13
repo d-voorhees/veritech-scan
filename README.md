@@ -2,6 +2,8 @@
 
 **Evidence-first technical pre-screening for web-business acquisitions.**
 
+Current version: **v1** — see [CHANGELOG.md](CHANGELOG.md) for full release history.
+
 Veritech Scan is a product of [Veritech Diligence](https://veritechdiligence.com).
 Veritech Diligence provides technical due diligence for buyers of web-based
 businesses. Veritech Scan is a bounded, rate-limited, public-web technical
@@ -26,12 +28,16 @@ It answers one practical question for a prospective buyer:
   a required authorization acknowledgment.
 - An on-demand scan pipeline (no persistent worker, no Redis — see
   "Architecture" below) covering: HTTP/redirect checks, robots.txt +
-  sitemap discovery, a bounded same-origin crawl, DNS/SPF/DMARC posture,
-  Playwright homepage rendering + third-party dependency inventory, local
-  rules-based technology detection, and a performance adapter (local
-  metrics always; Google PageSpeed Insights optionally, when configured).
-- A deterministic, versioned rules engine (12 rules) that turns collected
+  sitemap discovery (cross-checked against the actual crawled page set), a
+  bounded same-origin crawl, DNS/SPF/DMARC/DKIM posture, Playwright
+  homepage rendering + third-party dependency inventory, local rules-based
+  technology detection, and a performance adapter (local metrics always;
+  Google PageSpeed Insights optionally, when configured, for both desktop
+  and mobile).
+- A deterministic, versioned rules engine (13 rules) that turns collected
   evidence into severity- and confidence-scored findings — never an LLM.
+  Every report lists the full rule catalog and each rule's outcome, not
+  just the rules that happened to fire.
 - A full report UI: status, task panel, risk register, expandable evidence,
   DNS/HTTP/crawl/technology/performance sections, known limitations, and a
   clean HTML export meant for "Print → Save as PDF."
@@ -51,7 +57,7 @@ Veritech Scan is **not**:
   *confirmed vulnerability*, and the product never claims the latter.
 
 See `docs/threat-model.md` for the full list of technical non-goals (full
-`robots.txt` enforcement, DKIM discovery, high availability, etc).
+`robots.txt` enforcement, high availability, etc).
 
 ## Architecture: web/API Machine vs. scan-runner Machines
 
@@ -235,7 +241,7 @@ make lint            # ruff + mypy (backend), eslint (frontend)
 
 The backend suite (`tests/backend/`) covers URL normalization,
 SSRF/private-IP/redirect-revalidation protections, crawl URL filtering and
-max-page limits, SPF/DMARC parsing, all 12 rules (firing and non-firing
+max-page limits, SPF/DMARC/DKIM parsing, all 13 rules (firing and non-firing
 cases), finding-to-evidence linkage, the scan creation/retrieval API and
 ownership authorization, scan status transitions, duplicate-runner
 prevention, Fly Machine creation failure handling, partial-completion
@@ -305,9 +311,13 @@ Summarized here; full detail in `docs/threat-model.md`:
 - **Finite scan resource/time limits.** `SCAN_MAX_TOTAL_MINUTES` (default
   10) and the 10/25/50 page caps bound every scan; browser rendering covers
   the homepage only, not every crawled page.
-- `robots.txt` is recorded as evidence but not enforced against the
-  crawler (documented in the report itself, not just here).
-- DKIM discovery is out of scope for the MVP (SPF + DMARC only).
+- `robots.txt` is not enforced against the crawler, but the crawled page
+  set is cross-referenced against robots.txt `Disallow` rules and the
+  declared sitemap, both reported in the Crawl and indexability section.
+- DKIM discovery is best-effort: it probes 16 common ESP-default selectors
+  (Google Workspace, Microsoft 365, Mailchimp, SendGrid, etc.) rather than
+  the domain's actual selector, which isn't discoverable without an
+  authenticated mail sample. A miss is not proof of absence.
 - Google PageSpeed Insights metrics only appear when
   `GOOGLE_PAGESPEED_API_KEY` is configured; otherwise the report says so
   explicitly rather than silently omitting the section.

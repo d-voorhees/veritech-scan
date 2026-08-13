@@ -91,6 +91,20 @@ def _extract_page_data(html: str, page_url: str, allowed_hostname: str) -> dict:
     }
 
 
+def _dedupe_key(url: str) -> str:
+    """Collapses trailing-slash variants (`/privacy` vs `/privacy/`) to the same
+    identity so a page discovered under both spellings is only crawled/reported
+    once. Used only for the visited-set check — the actual URL fetched and
+    recorded is whichever spelling was first discovered."""
+    parts = urlsplit(url)
+    path = parts.path
+    if len(path) > 1 and path.endswith("/"):
+        path = path.rstrip("/")
+    return urlsplit("")._replace(
+        scheme=parts.scheme, netloc=parts.netloc.lower(), path=path, query=parts.query, fragment=""
+    ).geturl()
+
+
 def run_crawl(db, scan_request_id: uuid.UUID, canonical_url: str, hostname: str, max_pages: int) -> dict:
     settings = get_settings()
     delay = settings.scan_default_request_delay_seconds
@@ -107,9 +121,10 @@ def run_crawl(db, scan_request_id: uuid.UUID, canonical_url: str, hostname: str,
     ) as client:
         while queue and pages_fetched < max_pages:
             url = queue.popleft()
-            if url in visited:
+            key = _dedupe_key(url)
+            if key in visited:
                 continue
-            visited.add(url)
+            visited.add(key)
 
             if not is_crawlable_url(url, hostname):
                 continue
@@ -166,7 +181,7 @@ def run_crawl(db, scan_request_id: uuid.UUID, canonical_url: str, hostname: str,
                     page.external_link_count = extracted["external_link_count"]
 
                     for link in extracted["discovered_links"]:
-                        if link not in visited and is_crawlable_url(link, hostname):
+                        if _dedupe_key(link) not in visited and is_crawlable_url(link, hostname):
                             queue.append(link)
                 elif final_response.status_code >= 400:
                     error_count += 1

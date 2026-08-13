@@ -32,6 +32,37 @@ def _fetch(client: httpx.Client, url: str) -> tuple[int | None, str | None, str 
         return None, None, str(exc)
 
 
+def _parse_robots_disallow(robots_text: str) -> list[str]:
+    """Returns Disallow path prefixes that apply to `User-agent: *` groups.
+
+    Consecutive `User-agent:` lines are grouped per the robots.txt spec (a
+    block of directives applies to every agent named immediately above it);
+    a group is considered closed once a non-user-agent directive is seen.
+    Wildcard (`*`) and end-anchor (`$`) extensions used by some robots.txt
+    files are not evaluated — only plain prefix matching.
+    """
+    disallow: list[str] = []
+    current_agents: set[str] = set()
+    group_open = False
+    for raw_line in robots_text.splitlines():
+        line = raw_line.split("#", 1)[0].strip()
+        if not line or ":" not in line:
+            continue
+        key, _, value = line.partition(":")
+        key = key.strip().lower()
+        value = value.strip()
+        if key == "user-agent":
+            if group_open:
+                current_agents = set()
+                group_open = False
+            current_agents.add(value.lower())
+        elif key in ("disallow", "allow", "crawl-delay", "sitemap"):
+            group_open = True
+            if key == "disallow" and value and "*" in current_agents:
+                disallow.append(value)
+    return disallow
+
+
 def _parse_sitemap_xml(xml_text: str) -> tuple[str, list[str], list[str]]:
     """Returns (kind, urls, parse_errors) where kind is 'urlset', 'sitemapindex', or 'unknown'."""
     urls: list[str] = []
@@ -88,6 +119,9 @@ def run_robots_and_sitemap_checks(db, scan_request_id: uuid.UUID, canonical_url:
                     declared_sitemaps.append(line.split(":", 1)[1].strip())
         summary["sitemap_urls_declared"] = declared_sitemaps
 
+        disallow_rules = _parse_robots_disallow(robots_text) if robots_text else []
+        summary["disallow_rules"] = disallow_rules
+
         robots_evidence = EvidenceItem(
             scan_request_id=scan_request_id,
             category="robots_sitemap",
@@ -98,6 +132,7 @@ def run_robots_and_sitemap_checks(db, scan_request_id: uuid.UUID, canonical_url:
             normalized_payload_json={
                 "status_code": status_code,
                 "declared_sitemaps": declared_sitemaps,
+                "disallow_rules": disallow_rules,
                 "retrieval_error": error,
                 "body_excerpt": (robots_text or "")[:4000],
             },
@@ -106,7 +141,8 @@ def run_robots_and_sitemap_checks(db, scan_request_id: uuid.UUID, canonical_url:
                 if status_code
                 else f"robots.txt retrieval failed: {error}"
             )
-            + f" Declared {len(declared_sitemaps)} sitemap URL(s). "
+            + f" Declared {len(declared_sitemaps)} sitemap URL(s) and {len(disallow_rules)} "
+            "Disallow rule(s) for User-agent: *. "
             "Recorded as evidence only — this scan does not implement full robots.txt enforcement.",
             raw_response_reference=None,
         )
@@ -165,6 +201,9 @@ def run_robots_and_sitemap_checks(db, scan_request_id: uuid.UUID, canonical_url:
                 "sitemap_count": sitemap_count,
                 "discovered_url_count": len(discovered_urls),
                 "sample_urls": discovered_urls[:SAMPLE_URL_LIMIT],
+                # Full list (already bounded to max_pages * 5 above), kept so the
+                # report can cross-reference it against the actual crawled page set.
+                "discovered_urls": discovered_urls,
                 "parsing_errors": parsing_errors,
                 "retrieval_errors": retrieval_errors,
             },

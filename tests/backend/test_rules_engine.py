@@ -59,6 +59,50 @@ def test_dmarc_policy_none_produces_low_severity_finding(db, scan_request):
     assert finding.confidence == "high"
 
 
+def test_dkim_selector_found_produces_info_finding(db, scan_request):
+    _evidence(db, scan_request, "email_posture", "spf_dmarc_lookup")
+    db.add(
+        DNSObservation(
+            scan_request_id=scan_request.id, record_type="DKIM", name="google._domainkey.example.com",
+            values=["v=DKIM1; k=rsa; p=..."], lookup_successful=True, dkim_selector="google",
+        )
+    )
+    db.commit()
+
+    run_rules_engine(db, scan_request)
+
+    finding = (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.title.like("DKIM signing detected%"))
+        .first()
+    )
+    assert finding is not None
+    assert finding.severity == "info"
+    assert "google" in finding.title
+
+
+def test_dkim_selector_found_does_not_fire_without_a_hit(db, scan_request):
+    _evidence(db, scan_request, "email_posture", "spf_dmarc_lookup")
+    db.add(
+        DNSObservation(
+            scan_request_id=scan_request.id, record_type="DKIM", name="example.com",
+            values=[], lookup_successful=True,
+            error_message="No DKIM record found under any of 16 common selectors probed.",
+        )
+    )
+    db.commit()
+
+    run_rules_engine(db, scan_request)
+
+    assert (
+        db.query(Finding)
+        .filter(Finding.scan_request_id == scan_request.id, Finding.category == "email_deliverability")
+        .filter(Finding.title.like("DKIM%"))
+        .first()
+        is None
+    )
+
+
 def test_homepage_not_https_is_high_severity(db, scan_request):
     _evidence(db, scan_request, "http", "http_response")
     db.add(
@@ -145,7 +189,7 @@ def test_excessive_crawl_errors_rule(db, scan_request):
 def test_pagespeed_rule_only_fires_when_configured(db, scan_request):
     db.add(
         PerformanceObservation(
-            scan_request_id=scan_request.id, provider="local", configured=False, performance_score=30,
+            scan_request_id=scan_request.id, provider="local", configured=False, mobile_performance_score=30,
         )
     )
     db.commit()
@@ -162,7 +206,7 @@ def test_pagespeed_rule_fires_when_configured_and_below_threshold(db, scan_reque
     _evidence(db, scan_request, "performance", "performance_measurement")
     db.add(
         PerformanceObservation(
-            scan_request_id=scan_request.id, provider="google_pagespeed", configured=True, performance_score=25,
+            scan_request_id=scan_request.id, provider="google_pagespeed", configured=True, mobile_performance_score=25,
         )
     )
     db.commit()

@@ -1,8 +1,14 @@
-"""Collector 4: DNS and email posture (SPF / DMARC).
+"""Collector 4: DNS and email posture (SPF / DMARC / DKIM).
 
-DKIM discovery is intentionally out of scope for the MVP — see
-`docs/rules-engine.md` for the documented extension point (user-supplied
-selector checks).
+DKIM has no fixed, well-known DNS location the way SPF (domain apex TXT) and
+DMARC (_dmarc.<domain>) do — a DKIM public key lives at
+`<selector>._domainkey.<domain>`, and the selector is chosen by whichever
+sending service configured it. Without an authenticated mail sample there is
+no way to learn the real selector, so this collector does a best-effort probe
+of a curated list of selectors used by default by common email/marketing
+providers (Google Workspace, Microsoft 365, Mailchimp, SendGrid, etc.). A hit
+is strong positive evidence; a miss is not proof of absence — the domain may
+sign with a selector outside this list.
 """
 
 import uuid
@@ -15,6 +21,27 @@ from app.models.evidence import EvidenceItem
 from app.models.observation import DNSObservation
 
 RECORD_TYPES = ("A", "AAAA", "CNAME", "MX", "NS", "TXT")
+
+# Default selectors used out-of-the-box by common email/marketing providers.
+# Not exhaustive — a domain using a custom selector won't be found here.
+COMMON_DKIM_SELECTORS = (
+    "google",       # Google Workspace
+    "selector1",    # Microsoft 365
+    "selector2",    # Microsoft 365
+    "k1",           # Mailchimp / Mandrill
+    "mandrill",     # Mandrill
+    "s1",           # SendGrid (legacy)
+    "s2",           # SendGrid (legacy)
+    "smtpapi",      # SendGrid
+    "mailgun",      # Mailgun
+    "mailjet",      # Mailjet
+    "pm",           # Postmark
+    "zoho",         # Zoho Mail
+    "amazonses",    # Amazon SES
+    "dkim",         # generic
+    "default",      # generic
+    "mail",         # generic
+)
 
 
 def _resolve(resolver: dns.resolver.Resolver, name: str, record_type: str) -> tuple[list[str], bool, str | None]:
@@ -42,6 +69,19 @@ def _parse_dmarc(record_text: str) -> dict:
         "rua": tags.get("rua"),
         "pct": tags.get("pct"),
     }
+
+
+def _discover_dkim(resolver: dns.resolver.Resolver, hostname: str) -> list[dict]:
+    """Probes COMMON_DKIM_SELECTORS and returns one dict per selector that has
+    a TXT record looking like a real DKIM public key (contains a `p=` tag)."""
+    found = []
+    for selector in COMMON_DKIM_SELECTORS:
+        name = f"{selector}._domainkey.{hostname}"
+        values, lookup_successful, error_message = _resolve(resolver, name, "TXT")
+        record = next((v.strip('"') for v in values if "p=" in v.lower()), None)
+        if lookup_successful and record:
+            found.append({"selector": selector, "name": name, "record": record})
+    return found
 
 
 def run_dns_and_email_checks(
@@ -112,6 +152,35 @@ def run_dns_and_email_checks(
     summary["dmarc_record"] = dmarc_record
     summary["dmarc_policy"] = dmarc_tags.get("policy")
 
+    # --- DKIM: best-effort probe of common ESP-default selectors. --------------
+    dkim_hits = _discover_dkim(resolver, hostname)
+    for hit in dkim_hits:
+        db.add(
+            DNSObservation(
+                scan_request_id=scan_request_id,
+                record_type="DKIM",
+                name=hit["name"],
+                values=[hit["record"]],
+                lookup_successful=True,
+                dkim_selector=hit["selector"],
+            )
+        )
+    if not dkim_hits:
+        db.add(
+            DNSObservation(
+                scan_request_id=scan_request_id,
+                record_type="DKIM",
+                name=hostname,
+                values=[],
+                lookup_successful=True,
+                error_message=(
+                    f"No DKIM record found under any of {len(COMMON_DKIM_SELECTORS)} common selectors "
+                    "probed. Not proof of absence — a custom selector would not be found."
+                ),
+            )
+        )
+    summary["dkim_selectors_found"] = [hit["selector"] for hit in dkim_hits]
+
     db.flush()
 
     dns_evidence = EvidenceItem(
@@ -146,11 +215,19 @@ def run_dns_and_email_checks(
             "dmarc_policy": dmarc_tags.get("policy"),
             "dmarc_pct": dmarc_tags.get("pct"),
             "dmarc_rua": dmarc_tags.get("rua"),
+            "dkim_selectors_found": summary["dkim_selectors_found"],
+            "dkim_selectors_probed": list(COMMON_DKIM_SELECTORS),
         },
         human_readable_summary=(
             f"SPF record {'present' if summary['spf_present'] else 'not present'}. "
             f"DMARC record {'present' if summary['dmarc_present'] else 'not present'}"
             + (f" with policy p={dmarc_tags.get('policy')}." if dmarc_tags.get("policy") else ".")
+            + (
+                f" DKIM found under selector(s): {', '.join(summary['dkim_selectors_found'])}."
+                if summary["dkim_selectors_found"]
+                else f" No DKIM record found under {len(COMMON_DKIM_SELECTORS)} commonly probed selectors "
+                "(not proof of absence)."
+            )
         ),
         raw_response_reference=None,
     )

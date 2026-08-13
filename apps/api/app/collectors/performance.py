@@ -45,12 +45,20 @@ class GooglePageSpeedProvider(PerformanceProvider):
     def __init__(self, api_key: str) -> None:
         self.api_key = api_key
 
-    def collect(self, final_url: str, context: dict) -> dict:
+    # Google's hosted PageSpeed Insights API (runPagespeed) only supports these four
+    # Lighthouse categories. Lighthouse's standalone CLI added an experimental
+    # "Agentic Browsing" category in v13.3, but as of this API's current reference
+    # docs (developers.google.com/speed/docs/insights/v5/reference/pagespeedapi/runpagespeed)
+    # that category is not yet exposed through the hosted API — only through local
+    # Lighthouse runs. Revisit once Google rolls it into this endpoint.
+    CATEGORIES = ["PERFORMANCE", "ACCESSIBILITY", "BEST_PRACTICES", "SEO"]
+
+    def collect(self, final_url: str, context: dict, strategy: str) -> dict:
         params = {
             "url": final_url,
             "key": self.api_key,
-            "strategy": "mobile",
-            "category": ["PERFORMANCE", "ACCESSIBILITY", "BEST_PRACTICES", "SEO"],
+            "strategy": strategy,
+            "category": self.CATEGORIES,
         }
         try:
             with httpx.Client(timeout=30) as client:
@@ -95,46 +103,58 @@ class GooglePageSpeedProvider(PerformanceProvider):
 
 def run_performance_checks(db, scan_request_id: uuid.UUID, final_url: str, context: dict) -> dict:
     settings = get_settings()
-    providers: list[PerformanceProvider] = [LocalPerformanceProvider()]
-    if settings.google_pagespeed_api_key:
-        providers.append(GooglePageSpeedProvider(settings.google_pagespeed_api_key))
+    local_provider = LocalPerformanceProvider()
+    merged: dict = {k: v for k, v in local_provider.collect(final_url, context).items() if v is not None}
 
-    results = []
-    for provider in providers:
-        data = provider.collect(final_url, context)
-        results.append(data)
+    pagespeed_configured = bool(settings.google_pagespeed_api_key)
+    provider_names = [local_provider.name]
 
-    merged: dict = {}
-    for r in results:
-        merged.update({k: v for k, v in r.items() if v is not None})
+    if pagespeed_configured:
+        pagespeed_provider = GooglePageSpeedProvider(settings.google_pagespeed_api_key)
+        provider_names.append(pagespeed_provider.name)
+        for strategy in ("desktop", "mobile"):
+            strategy_data = pagespeed_provider.collect(final_url, context, strategy)
+            for key, value in strategy_data.items():
+                if key in ("provider", "configured") or value is None:
+                    continue
+                merged[f"{strategy}_{key}"] = value
 
     observation = PerformanceObservation(
         scan_request_id=scan_request_id,
-        provider="+".join(p.name for p in providers),
-        configured=any(p.name == "google_pagespeed" for p in providers),
+        provider="+".join(provider_names),
+        configured=pagespeed_configured,
         response_duration_ms=merged.get("response_duration_ms"),
         html_bytes=merged.get("html_bytes"),
         third_party_domain_count=merged.get("third_party_domain_count"),
         js_resource_count=merged.get("js_resource_count"),
-        lcp_ms=merged.get("lcp_ms"),
-        cls=merged.get("cls"),
-        inp_ms=merged.get("inp_ms"),
-        fcp_ms=merged.get("fcp_ms"),
-        ttfb_ms=merged.get("ttfb_ms"),
-        performance_score=merged.get("performance_score"),
-        accessibility_score=merged.get("accessibility_score"),
-        best_practices_score=merged.get("best_practices_score"),
-        seo_score=merged.get("seo_score"),
+        desktop_lcp_ms=merged.get("desktop_lcp_ms"),
+        desktop_cls=merged.get("desktop_cls"),
+        desktop_inp_ms=merged.get("desktop_inp_ms"),
+        desktop_fcp_ms=merged.get("desktop_fcp_ms"),
+        desktop_ttfb_ms=merged.get("desktop_ttfb_ms"),
+        desktop_performance_score=merged.get("desktop_performance_score"),
+        desktop_accessibility_score=merged.get("desktop_accessibility_score"),
+        desktop_best_practices_score=merged.get("desktop_best_practices_score"),
+        desktop_seo_score=merged.get("desktop_seo_score"),
+        mobile_lcp_ms=merged.get("mobile_lcp_ms"),
+        mobile_cls=merged.get("mobile_cls"),
+        mobile_inp_ms=merged.get("mobile_inp_ms"),
+        mobile_fcp_ms=merged.get("mobile_fcp_ms"),
+        mobile_ttfb_ms=merged.get("mobile_ttfb_ms"),
+        mobile_performance_score=merged.get("mobile_performance_score"),
+        mobile_accessibility_score=merged.get("mobile_accessibility_score"),
+        mobile_best_practices_score=merged.get("mobile_best_practices_score"),
+        mobile_seo_score=merged.get("mobile_seo_score"),
     )
     db.add(observation)
     db.flush()
 
-    pagespeed_configured = any(p.name == "google_pagespeed" for p in providers)
     summary = (
         "Local performance measurements recorded. "
         + (
-            f"Google PageSpeed Insights performance score: {merged.get('performance_score')}."
-            if pagespeed_configured and merged.get("performance_score") is not None
+            f"Google PageSpeed Insights performance score — desktop: {merged.get('desktop_performance_score')}, "
+            f"mobile: {merged.get('mobile_performance_score')}."
+            if pagespeed_configured
             else "Google PageSpeed Insights was not configured for this scan; only local measurements are available."
         )
     )

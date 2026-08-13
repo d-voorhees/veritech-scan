@@ -347,7 +347,13 @@ export default function HomePage() {
                   </tr>
                   <tr>
                     <td className="cat">Technology stack</td>
-                    <td className="desc">What&rsquo;s actually running the site, detected from the public-facing code, not guessed.</td>
+                    <td className="desc">
+                      What&rsquo;s actually running the site — CMS and website-builder platforms, e-commerce,
+                      frontend frameworks, analytics and tag managers, advertising and email marketing, customer
+                      support and chat, payments, CDN and hosting, fonts and JS libraries, consent management,
+                      forms and scheduling, search, captcha, and embedded video or maps — detected from the
+                      public-facing code, not guessed.
+                    </td>
                   </tr>
                   <tr>
                     <td className="cat">Third-party dependencies</td>

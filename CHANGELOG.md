@@ -4,8 +4,44 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## v1 — 2026-08-12
+
 ### Added
 
+- **Crawl cross-checked against robots.txt and sitemap.** "Crawl and
+  indexability" now reports three things the previous version never
+  compared: pages the crawl reached that aren't declared in the sitemap,
+  sitemap URLs that weren't reached within the scan's page budget, and
+  (informational only, since this scan has never enforced robots.txt)
+  pages reached despite matching a `Disallow` rule for `User-agent: *`.
+  `robots_sitemap.py` now parses robots.txt Disallow rules and retains the
+  full sitemap URL list (previously capped at a 10-URL sample); the
+  comparison itself is new in `report_builder._build_sitemap_check`.
+- **DKIM discovery.** `dns_checks.py` probes 16 common ESP-default
+  selectors (Google Workspace, Microsoft 365, Mailchimp, SendGrid, etc.)
+  against `<selector>._domainkey.<domain>` and surfaces any hits in the DNS
+  and email posture table plus a new informational
+  `dkim_selector_found` rule. A miss is reported as "not proof of
+  absence" rather than a false negative, since DKIM — unlike SPF/DMARC —
+  has no fixed, well-known record location. Adds `dkim_selector` to
+  `dns_observations` (migration `20fcb897e807`).
+- **Third-party dependency listing.** The "Third-party dependencies"
+  section (previously just a bare count buried in Performance) now lists
+  every hostname observed while rendering the homepage, with request
+  count, category, and — for ~35 well-known vendors including Meta Pixel,
+  Google Analytics/Tag Manager, Stripe, HubSpot, and Intercom — a friendly
+  vendor name (`dependency_classification.py`), in both the HTML export
+  and the dashboard.
+- **Desktop and mobile PageSpeed Insights scores.** The performance
+  section, renamed **"Page speed performance,"** now fetches both
+  `strategy=desktop` and `strategy=mobile` runs from PageSpeed Insights
+  instead of only mobile, and reports Performance/Accessibility/Best
+  Practices/SEO scores plus Core Web Vitals for each side by side.
+  `PerformanceObservation` gained `desktop_*`/`mobile_*` columns replacing
+  the old unprefixed (silently mobile-only) ones (migration
+  `a00440335fda`). Lighthouse's new experimental "Agentic Browsing"
+  category was investigated and left out for now — confirmed against
+  Google's PSI API reference that it isn't exposed by the hosted API yet.
 - **CI/CD: push-to-deploy on `main`.** `.github/workflows/deploy.yml` runs
   the full backend (ruff/mypy/pytest) and frontend (eslint/tsc/tests) suite
   on every push to `main`, then — only if that passes — runs
@@ -23,6 +59,18 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- **Landing page technology-stack row.** The "What it checks" table's
+  Technology stack description now lists the specific categories detected
+  (CMS/website-builder, e-commerce, frontend frameworks, analytics/tag
+  managers, advertising/email marketing, support/chat, payments,
+  CDN/hosting, fonts/JS libraries, consent management, forms/scheduling,
+  search, captcha, embedded video/maps) instead of a one-line summary.
+- **Known-limitations text.** Removed the "Google PageSpeed Insights
+  metrics are only present when configured" line; rewrote the DKIM line
+  to describe the new best-effort selector-probing scope instead of
+  claiming DKIM isn't assessed at all; rewrote the robots.txt line to
+  describe the new sitemap/Disallow cross-check instead of just stating
+  robots.txt isn't enforced.
 - **Replaced the Oracle Cloud/systemd/Caddy/Dramatiq+Redis deployment with
   Fly.io.** The app now deploys as one Fly app with two Machine roles: an
   always-deployed web/API Machine (Next.js + FastAPI, autostop/autostart,
@@ -39,6 +87,24 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- **Crawl/indexability double-counted trailing-slash URL variants.**
+  `/privacy` and `/privacy/` were treated as separate pages when both
+  spellings were discovered while crawling, double-counting the same
+  page. The crawler (`crawler.py`) now dedupes against a trailing-slash-
+  normalized key while still fetching and recording whichever URL variant
+  was first discovered.
+- **False-positive WooCommerce detection.** The detector matched the bare
+  substring "woocommerce" anywhere in a page's HTML, so pages that merely
+  *mention* WooCommerce in marketing copy (e.g. describing it as a
+  service the business supports) were flagged as running it. Now requires
+  actual WooCommerce fingerprints — plugin asset paths, the
+  `woocommerce_params` JS object, WooCommerce CSS classes, or the
+  `wc-ajax=` endpoint (`technology.py`).
+- **Technology tables in the HTML export had inconsistent column
+  widths.** Each technology category (analytics, cdn security, marketing,
+  ...) rendered as its own `<table>` with browser-computed auto layout,
+  so columns didn't line up between categories. Gave them a shared
+  `.tech-table` class with fixed 30/50/20% column widths.
 - `apps/api/.env` and `apps/web/.env` symlinks to the repo-root `.env`.
   Pydantic-settings (`apps/api/app/config.py`) and Next.js both resolve
   `.env` relative to their own working directory, but `make migrate`,
