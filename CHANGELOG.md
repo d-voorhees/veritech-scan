@@ -2,12 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
-## Unreleased
-
 ## v1 — 2026-08-12
 
 ### Added
 
+- **Rules engine coverage in every report.** The report previously only
+  listed rules that fired — a rule that checked cleanly left no trace, so
+  there was no way to see that the deterministic engine actually ran all
+  13 rules. Added a static `RULE_CATALOG` (`rules/definitions.py`)
+  describing what each rule checks, cross-referenced against a scan's
+  actual findings in `report_builder._build_rules_checked()`. Every
+  report now shows a "Rules engine coverage" table (HTML export and
+  dashboard): all 13 rules, what each one checks, and its outcome — fired
+  with severity, or "No finding raised." Also added the DKIM rule's first
+  test coverage (`tests/backend/test_rules_engine.py`), which had none.
 - **Crawl cross-checked against robots.txt and sitemap.** "Crawl and
   indexability" now reports three things the previous version never
   compared: pages the crawl reached that aren't declared in the sitemap,
@@ -59,6 +67,16 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- **Docs brought back in sync with the code.** README (rule count 12→13,
+  DNS posture description now includes DKIM, non-goals list no longer
+  claims DKIM is out of scope, known-limitations wording rewritten to
+  match the actual DKIM/robots.txt behavior, test-coverage claim now
+  accurate), `docs/threat-model.md` (removed the stale "DKIM discovery is
+  a non-goal" bullet, updated the robots.txt non-goal to describe the new
+  sitemap/Disallow cross-check), and `docs/rules-engine.md` (added
+  `dkim_selector_found` to the rules table, documented `RULE_CATALOG`) —
+  all previously described a pre-DKIM, pre-sitemap-cross-check, 12-rule
+  version of the product.
 - **Landing page technology-stack row.** The "What it checks" table's
   Technology stack description now lists the specific categories detected
   (CMS/website-builder, e-commerce, frontend frameworks, analytics/tag
