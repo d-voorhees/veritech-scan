@@ -28,7 +28,7 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-sm border-t-2 border-t-primary">
+      <Card className="w-full max-w-sm border-0 border-t-2 border-t-primary">
         <CardHeader className="gap-2 pb-5 pt-6">
           <div className="eyebrow text-primary">{productConfig.parentBrand}</div>
           <CardTitle className="text-xl font-bold tracking-tight text-foreground">
