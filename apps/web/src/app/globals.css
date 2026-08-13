@@ -23,3 +23,10 @@ body {
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
+
+.tech-pill {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1.4rem;
+  background-color: #f1f1f1;
+}

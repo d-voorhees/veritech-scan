@@ -219,7 +219,17 @@ def run_scan(scan_id: str, runner_machine_id: str | None = None) -> int:
 
             if time_remaining():
                 _run_job(
-                    db, scan, "crawl", lambda: crawler.run_crawl(db, scan.id, target.canonical_url, target.hostname, scan.max_pages)
+                    db,
+                    scan,
+                    "crawl",
+                    lambda: crawler.run_crawl(
+                        db,
+                        scan.id,
+                        target.canonical_url,
+                        target.hostname,
+                        scan.max_pages,
+                        sitemap_urls=(robots_result or {}).get("discovered_urls"),
+                    ),
                 )
             _touch_heartbeat(db, scan)
 

@@ -10,7 +10,7 @@ from app.core.url_safety import UnsafeTargetError
 from app.db import get_db
 from app.models.evidence import EvidenceItem
 from app.models.finding import Finding, FindingEvidence
-from app.models.scan import ScanRequest
+from app.models.scan import CLAIMABLE_SCAN_STATUSES, SCAN_STATUS_RUNNING, ScanRequest
 from app.models.user import User
 from app.schemas.evidence import EvidenceItemOut, FindingOut
 from app.schemas.report import ReportOut
@@ -85,6 +85,20 @@ def get_scan(
     db.refresh(scan)
     _ = scan.jobs  # ensure loaded
     return scan
+
+
+@router.delete("/{scan_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_scan(
+    scan_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+) -> Response:
+    scan = _get_owned_scan(db, scan_id, user)
+    if scan.status in CLAIMABLE_SCAN_STATUSES or scan.status == SCAN_STATUS_RUNNING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Cannot delete a scan that is still in progress."
+        )
+    db.delete(scan)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{scan_id}/events", response_model=list[ScanEventOut])

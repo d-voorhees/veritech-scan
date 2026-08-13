@@ -4,6 +4,11 @@ Never submits forms, authenticates, solves CAPTCHAs, or bypasses access
 controls. Only follows same-origin links that pass the exclusion policy in
 app/core/crawl_policy.py, up to the user-selected page budget, at the
 configured per-target request delay.
+
+When the robots_sitemap collector found sitemap URLs, they are seeded into
+the queue right after the homepage — ahead of any links discovered by
+crawling — so a declared sitemap takes priority over whatever the homepage
+happens to link to.
 """
 
 import time
@@ -105,16 +110,39 @@ def _dedupe_key(url: str) -> str:
     ).geturl()
 
 
-def run_crawl(db, scan_request_id: uuid.UUID, canonical_url: str, hostname: str, max_pages: int) -> dict:
+def run_crawl(
+    db,
+    scan_request_id: uuid.UUID,
+    canonical_url: str,
+    hostname: str,
+    max_pages: int,
+    sitemap_urls: list[str] | None = None,
+) -> dict:
     settings = get_settings()
     delay = settings.scan_default_request_delay_seconds
     timeout = settings.scan_page_timeout_seconds
 
-    queue: deque[str] = deque([normalize_url_no_fragment(canonical_url)])
+    homepage_url = normalize_url_no_fragment(canonical_url)
+    queue: deque[str] = deque([homepage_url])
     visited: set[str] = set()
     pages_fetched = 0
     error_count = 0
     homepage_evidence_id = None
+
+    # Seed the queue with sitemap URLs (in sitemap order) before any
+    # homepage-discovered links are appended, so they're fetched first.
+    seeded_keys: set[str] = {_dedupe_key(homepage_url)}
+    sitemap_seeded_count = 0
+    for sitemap_url in sitemap_urls or []:
+        normalized = normalize_url_no_fragment(sitemap_url)
+        if not is_crawlable_url(normalized, hostname):
+            continue
+        key = _dedupe_key(normalized)
+        if key in seeded_keys:
+            continue
+        seeded_keys.add(key)
+        queue.append(normalized)
+        sitemap_seeded_count += 1
 
     with httpx.Client(
         follow_redirects=False, timeout=timeout, headers={"User-Agent": USER_AGENT}
@@ -242,9 +270,11 @@ def run_crawl(db, scan_request_id: uuid.UUID, canonical_url: str, hostname: str,
             "pages_fetched": pages_fetched,
             "max_pages": max_pages,
             "error_count": error_count,
+            "sitemap_seeded_count": sitemap_seeded_count,
         },
         human_readable_summary=(
-            f"Crawled {pages_fetched} of a maximum {max_pages} same-origin pages; "
+            f"Crawled {pages_fetched} of a maximum {max_pages} same-origin pages "
+            f"({sitemap_seeded_count} seeded from the sitemap); "
             f"{error_count} returned an error or fetch failure."
         ),
         raw_response_reference=None,

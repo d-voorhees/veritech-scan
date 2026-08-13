@@ -34,16 +34,18 @@ It answers one practical question for a prospective buyer:
   technology detection, and a performance adapter (local metrics always;
   Google PageSpeed Insights optionally, when configured, for both desktop
   and mobile).
-- A deterministic, versioned rules engine (13 rules) that turns collected
+- A deterministic, versioned rules engine (24 rules) that turns collected
   evidence into severity- and confidence-scored findings — never an LLM.
   Every report lists the full rule catalog and each rule's outcome, not
   just the rules that happened to fire.
-- A full report UI: status, task panel, risk register, expandable evidence,
+- A full report UI: status, task panel (with per-task and total report
+  generation timing), risk register, expandable evidence,
   DNS/HTTP/crawl/technology/performance sections, known limitations, and a
   clean HTML export meant for "Print → Save as PDF."
-- Deploys to Fly.io: one web/API Machine plus on-demand scan-runner
-  Machines, with PostgreSQL (hosted on [Neon](https://neon.tech), external
-  to Fly) as the only persistent dependency.
+- Deploys to Fly.io: one always-on web/API Machine plus on-demand
+  scan-runner Machines, with PostgreSQL (hosted on
+  [Neon](https://neon.tech), external to Fly) as the other persistent
+  dependency.
 
 ## Explicit non-goals
 
@@ -62,17 +64,18 @@ See `docs/threat-model.md` for the full list of technical non-goals (full
 ## Architecture: web/API Machine vs. scan-runner Machines
 
 Veritech Scan runs as a single Fly.io app with **two Machine roles**, built
-from one `Dockerfile` as two separate images — `web` (Chromium-free, kept
-small so cold starts stay fast) and `scan-runner` (adds Playwright/Chromium)
-— with the runtime role within each selected by `scripts/entrypoint.sh`. See
-the Dockerfile's top-of-file comment and `scripts/deploy-fly.sh` for how
-both get built and pushed.
+from one `Dockerfile` as two separate images — `web` (Chromium-free) and
+`scan-runner` (adds Playwright/Chromium) — with the runtime role within each
+selected by `scripts/entrypoint.sh`. See the Dockerfile's top-of-file
+comment and `scripts/deploy-fly.sh` for how both get built and pushed. (The
+`web`/`scan-runner` split was originally done to try to fix web cold-start
+latency; it didn't — see "Known limitations" — but is kept since a
+Chromium-free web image is good practice regardless.)
 
 - **Web/API Machine** — Next.js + FastAPI. Serves the browser and the API.
-  Configured in `fly.toml` with `auto_stop_machines = "stop"`,
-  `auto_start_machines = true`, `min_machines_running = 0`: it stops when
-  idle and Fly's proxy auto-starts it again on the next request. It never
-  runs a scan itself and never runs a permanent queue worker.
+  Runs always-on (`min_machines_running = 1`, `auto_stop_machines = "off"`
+  in `fly.toml`) rather than scale-to-zero — see "Known limitations" for
+  why. It never runs a scan itself and never runs a permanent queue worker.
 - **Scan-runner Machine** — created on demand, exactly one per scan, via
   the Fly Machines API (`apps/api/app/services/fly_machines.py`). It
   receives the scan ID (via the `SCAN_ID` environment variable), claims the
@@ -245,7 +248,7 @@ make lint            # ruff + mypy (backend), eslint (frontend)
 
 The backend suite (`tests/backend/`) covers URL normalization,
 SSRF/private-IP/redirect-revalidation protections, crawl URL filtering and
-max-page limits, SPF/DMARC/DKIM parsing, all 13 rules (firing and non-firing
+max-page limits, SPF/DMARC/DKIM parsing, all 24 rules (firing and non-firing
 cases), finding-to-evidence linkage, the scan creation/retrieval API and
 ownership authorization, scan status transitions, duplicate-runner
 prevention, Fly Machine creation failure handling, partial-completion
@@ -299,18 +302,23 @@ Summarized here; full detail in `docs/threat-model.md`:
 
 ## Known limitations
 
-- **Cold starts for the web/API app.** `min_machines_running = 0` means the
-  first request after an idle period waits for Fly to autostart the
-  Machine — typically a few seconds.
+- **The web/API Machine runs always-on** (`min_machines_running = 1`,
+  `auto_stop_machines = "off"` in `fly.toml`), not scale-to-zero. A
+  2026-08-13 investigation found cold starts here were ~13-18s regardless
+  of VM size, image size, or region — pointing to a fixed Fly platform
+  boot cost rather than anything fixable app-side — so always-on trades a
+  small continuous compute cost for eliminating the wait entirely. It's
+  kept at the smallest VM tier (`shared-cpu-1x`/256mb) since a bigger VM
+  didn't help the cold start anyway; watch for OOM restarts under real
+  traffic as the first sign that's too small for steady-state load.
 - **Cold starts for scan runners.** Every scan waits for its Fly Machine to
-  boot before processing starts; there's no "warm" runner.
+  boot before processing starts; there's no "warm" runner — these remain
+  scale-to-zero since they only run for the duration of a scan.
 - **One scan per runner.** Each scan gets its own Machine — there is no
   batching/sharing, by design (see "Architecture" above).
-- **The database is a persistent, paid dependency.** Unlike the two Machine
-  roles, Neon Postgres doesn't scale to zero at the same tier this project
-  uses — it's the one always-on cost in this architecture, and it's billed
-  and managed separately from Fly (a different provider, a different
-  invoice).
+- **The database is a persistent, paid dependency**, billed and managed
+  separately from Fly (a different provider, a different invoice) — Neon
+  Postgres doesn't scale to zero at the tier this project uses.
 - **No public signup** — invite-only by design; see `docs/threat-model.md`.
 - **Finite scan resource/time limits.** `SCAN_MAX_TOTAL_MINUTES` (default
   10) and the 10/25/50 page caps bound every scan; browser rendering covers

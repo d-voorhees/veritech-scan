@@ -1,17 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { MoreVertical, Plus, Trash2 } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { ScanStatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { api } from "@/lib/api";
+import { api, type ScanSummary } from "@/lib/api";
 import { productConfig } from "@/lib/config";
 import { useRequireAuth } from "@/lib/use-auth";
 import { formatDateTime } from "@/lib/utils";
+
+const ACTIVE_STATUSES = new Set(["queued", "starting", "running"]);
 
 export default function DashboardPage() {
   useRequireAuth();
@@ -68,25 +71,82 @@ export default function DashboardPage() {
           )}
           <ul className="divide-y divide-border">
             {recent.map((scan) => (
-              <li key={scan.id}>
+              <li key={scan.id} className="group relative flex items-center justify-between px-5 py-3 text-sm hover:bg-muted">
                 <Link
                   href={`/scans/${scan.id}`}
-                  className="flex items-center justify-between px-5 py-3 text-sm hover:bg-muted"
-                >
-                  <div>
-                    <div className="font-medium">
-                      {scan.normalized_domain}
-                      {scan.is_demo && <span className="ml-2 text-xs text-muted-foreground">(demo)</span>}
-                    </div>
-                    <div className="text-xs text-muted-foreground">{formatDateTime(scan.created_at)}</div>
+                  className="absolute inset-0 z-0"
+                  aria-label={`View scan for ${scan.normalized_domain}`}
+                />
+                <div className="pointer-events-none">
+                  <div className="font-medium">
+                    {scan.normalized_domain}
+                    {scan.is_demo && <span className="ml-2 text-xs text-muted-foreground">(demo)</span>}
                   </div>
+                  <div className="text-xs text-muted-foreground">{formatDateTime(scan.created_at)}</div>
+                </div>
+                <div className="relative z-10 flex items-center gap-2">
                   <ScanStatusBadge status={scan.status} />
-                </Link>
+                  {!ACTIVE_STATUSES.has(scan.status) && <ScanRowMenu scan={scan} />}
+                </div>
               </li>
             ))}
           </ul>
         </CardContent>
       </Card>
     </AppShell>
+  );
+}
+
+function ScanRowMenu({ scan }: { scan: ScanSummary }) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const queryClient = useQueryClient();
+
+  const deleteMutation = useMutation({
+    mutationFn: () => api.deleteScan(scan.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["scans", "mine"] });
+    },
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    const onClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [open]);
+
+  return (
+    <div ref={menuRef} className="relative">
+      <button
+        type="button"
+        title="Scan options"
+        aria-label="Scan options"
+        className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-border hover:text-foreground"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <MoreVertical className="h-4 w-4" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 w-40 rounded-md border border-border bg-surface py-1 shadow-md">
+          <button
+            type="button"
+            disabled={deleteMutation.isPending}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-red-600 hover:bg-muted disabled:opacity-50"
+            onClick={() => {
+              if (window.confirm(`Delete the scan for ${scan.normalized_domain}? This cannot be undone.`)) {
+                deleteMutation.mutate();
+              }
+              setOpen(false);
+            }}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            {deleteMutation.isPending ? "Deleting…" : "Delete scan"}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

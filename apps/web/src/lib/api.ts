@@ -5,7 +5,10 @@
 // scripts/entrypoint.sh); in local dev, Next.js rewrites do the same
 // against API_INTERNAL_URL. This keeps CORS out of the picture entirely.
 
-const API_BASE = "/api/v1";
+// In production, NEXT_PUBLIC_API_BASE_URL is unset and this stays relative
+// so requests go through the same-origin rewrite in next.config.mjs. In
+// local dev there is no rewrite, so this points straight at the API process.
+const API_BASE = `${process.env.NEXT_PUBLIC_API_BASE_URL ?? ""}/api/v1`;
 
 export class ApiError extends Error {
   status: number;
@@ -181,6 +184,7 @@ export const api = {
   getScanFindings: (id: string) => request<Finding[]>(`/scans/${id}/findings`),
   getScanEvidence: (id: string) => request<EvidenceItem[]>(`/scans/${id}/evidence`),
   getScanReport: (id: string) => request<ReportOut>(`/scans/${id}/report`),
+  deleteScan: (id: string) => request<void>(`/scans/${id}`, { method: "DELETE" }),
   createScan: (payload: {
     target_input: string;
     notes: string;

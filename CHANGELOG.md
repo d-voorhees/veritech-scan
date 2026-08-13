@@ -2,6 +2,37 @@
 
 All notable changes to this project are documented in this file.
 
+## v2 — 2026-08-13
+
+### Added
+
+- **Report generation timing.** The scan detail page's "Collection tasks"
+  card now shows how long each task took to run, plus a "Total report
+  generation time" row once the scan finishes. No backend changes were
+  needed — `ScanJob.started_at`/`finished_at` were already recorded and
+  returned by the API; this just surfaces them. New `formatDuration()`
+  helper in `apps/web/src/lib/utils.ts`.
+
+### Fixed
+
+- **Collection tasks card described a stale, smaller rule catalog.** The
+  per-task descriptions and count (`(4 of 13 checks)`, etc.) were written
+  when the rules engine had 13 rules; it has since grown to 24
+  (`RULE_CATALOG` in `rules/definitions.py`) and several tasks now feed
+  checks their label never mentioned — `robots_sitemap` also drives the
+  xmlrpc.php/wp-json exposure checks, `dns_email_posture` also drives
+  domain-registration expiry, `browser_render` also drives three
+  accessibility checks plus mixed-content detection, `http_checks` also
+  drives TLS certificate expiry, and `technology_detection` (previously
+  labeled purely informational) drives the no-analytics-detected check.
+  Rewrote each task's description in `TASK_AREA_MAP`
+  (`apps/web/src/app/scans/[scanId]/page.tsx`) to list what it actually
+  feeds, and dropped the "(N of 13 checks)" counts — the live "Rules
+  engine coverage" table below already shows the real, current total, so
+  a second, hardcoded count in the task list served no purpose and would
+  only go stale again. Corrected the matching "13 rules"/"all 13 rules"
+  references in `README.md` to 24.
+
 ## v1 — 2026-08-12
 
 ### Added

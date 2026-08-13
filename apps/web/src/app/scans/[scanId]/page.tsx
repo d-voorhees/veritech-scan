@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { api, exportHtmlUrl } from "@/lib/api";
 import { useRequireAuth } from "@/lib/use-auth";
-import { cn, formatDateTime, titleCase } from "@/lib/utils";
+import { cn, formatDateTime, formatDuration, titleCase } from "@/lib/utils";
 
 const ACTIVE_STATUSES = new Set(["queued", "starting", "running"]);
 
@@ -21,14 +21,14 @@ const ACTIVE_STATUSES = new Set(["queued", "starting", "running"]);
 // reads as "what does this task investigate" rather than a raw pipeline
 // stage name — the two must be kept in sync if rules move between tasks.
 const TASK_AREA_MAP: Record<string, string> = {
-  http_checks: "Security posture — HTTPS, HSTS, CSP (3 of 13 checks)",
-  robots_sitemap: "Discoverability — sitemap presence (1 of 13 checks)",
-  crawl: "Indexability, on-page SEO, site reliability — canonical tag, meta description, crawl errors (3 of 13 checks)",
-  dns_email_posture: "Email deliverability — SPF, DMARC, DKIM (4 of 13 checks)",
-  browser_render: "Dependency management — third-party request domains (1 of 13 checks)",
-  technology_detection: "Technology stack identification (informational, not one of the 13 rule checks)",
-  performance: "Performance — mobile PageSpeed score (1 of 13 checks)",
-  rules_engine: "Evaluates evidence from every task above against all 13 checks and produces findings",
+  http_checks: "Security posture — HTTPS, HSTS, CSP headers, TLS certificate expiration",
+  robots_sitemap: "Discoverability and platform exposure — sitemap presence, WordPress xmlrpc.php and REST API exposure",
+  crawl: "Indexability, on-page SEO, site reliability — canonical tag, meta description, crawl errors",
+  dns_email_posture: "Email deliverability and domain registration — SPF, DMARC, DKIM, domain expiration",
+  browser_render: "Dependency management, accessibility, security posture — third-party request domains, image alt text, form labels, mixed content",
+  technology_detection: "Technology stack identification and analytics detection — tech stack, plus the analytics/tag-manager check",
+  performance: "Performance — mobile PageSpeed score",
+  rules_engine: "Evaluates evidence from every task above and produces findings",
 };
 
 export default function ScanDetailPage({ params }: { params: Promise<{ scanId: string }> }) {
@@ -115,7 +115,7 @@ export default function ScanDetailPage({ params }: { params: Promise<{ scanId: s
         <CardHeader>
           <CardTitle>Collection tasks</CardTitle>
           <CardDescription>
-            Each task runs independently — one failure does not fail the whole scan. Together they feed the 13
+            Each task runs independently — one failure does not fail the whole scan. Together they feed the
             checks the rules engine evaluates below.
           </CardDescription>
         </CardHeader>
@@ -136,12 +136,19 @@ export default function ScanDetailPage({ params }: { params: Promise<{ scanId: s
                 </div>
                 <div className="flex shrink-0 items-center gap-3 whitespace-nowrap text-xs text-muted-foreground">
                   {job.error_message && <span className="max-w-xs truncate text-red-600">{job.error_message}</span>}
+                  <span className="tabular-nums">{formatDuration(job.started_at, job.finished_at)}</span>
                   <span className="capitalize">{job.status}</span>
                 </div>
               </li>
             ))}
           </ul>
         </CardContent>
+        {scan.started_at && scan.completed_at && (
+          <div className="flex items-center justify-between border-t border-border px-5 py-2.5 text-sm font-medium">
+            <span>Total report generation time</span>
+            <span className="tabular-nums">{formatDuration(scan.started_at, scan.completed_at)}</span>
+          </div>
+        )}
       </Card>
 
       {isActive && eventsQuery.data && eventsQuery.data.length > 0 && (
@@ -734,7 +741,7 @@ function TechnologySection({
                 <div className="eyebrow mb-2 text-muted-foreground">{titleCase(category)}</div>
                 <div className="flex flex-wrap gap-2">
                   {byCategory.get(category)!.map((t, i) => (
-                    <Badge key={i} variant="outline" title={String(t.detection_method)}>
+                    <Badge key={i} variant="outline" className="tech-pill" title={String(t.detection_method)}>
                       {String(t.technology_name)}
                     </Badge>
                   ))}

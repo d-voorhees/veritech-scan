@@ -201,6 +201,9 @@ def run_robots_and_sitemap_checks(db, scan_request_id: uuid.UUID, canonical_url:
         summary["sitemap_count"] = sitemap_count
         summary["discovered_url_count"] = len(discovered_urls)
         summary["sample_urls"] = discovered_urls[:SAMPLE_URL_LIMIT]
+        # Full (already-bounded) list, consumed by the crawler to seed its
+        # queue with sitemap URLs ahead of organically-discovered links.
+        summary["discovered_urls"] = discovered_urls
         summary["parsing_errors"] = parsing_errors
         summary["retrieval_errors"] = retrieval_errors
 

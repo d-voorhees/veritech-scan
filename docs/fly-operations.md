@@ -103,13 +103,15 @@ token from the environment on their next request.
 
 ## Cost and scaling notes
 
-- The web/API Machine bills only while running — `min_machines_running = 0`
-  plus autostop/autostart means near-zero compute cost during idle periods,
-  at the cost of a cold start on the first request after idling (see
-  README's "Known limitations").
+- The web/API Machine now runs always-on (`min_machines_running = 1`,
+  `auto_stop_machines = "off"`) at the smallest VM tier
+  (`shared-cpu-1x`/256mb) — see README's "Known limitations" for why
+  scale-to-zero was dropped here (a fixed ~13-18s Fly platform boot cost,
+  not something CPU/memory/image-size/region changes could fix).
 - Each scan-runner Machine bills only for the scan's actual duration (a few
-  seconds to `SCAN_MAX_TOTAL_MINUTES`), then is destroyed.
-- Postgres is the one always-on, always-billed dependency in this
+  seconds to `SCAN_MAX_TOTAL_MINUTES`), then is destroyed — these remain
+  scale-to-zero.
+- Postgres is the other always-on, always-billed dependency in this
   architecture — size it for your actual data volume, not scan traffic.
 - Scan-runner Machines are sized larger than the web/API Machine (more
   CPU/memory, for Chromium) — see the `guest` config in
