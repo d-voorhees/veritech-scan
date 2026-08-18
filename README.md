@@ -103,7 +103,7 @@ database*; see `docs/architecture.md` for the full flow and diagram.
 
 ### Data flow
 
-The database is **not** hosted on Fly — it's a [Neon](https://neon.tech)
+The database is a [Neon](https://neon.tech)
 Postgres project, external to the Fly app, reached over a TLS connection
 (`sslmode=require`) from whichever Machine needs it:
 
