@@ -44,6 +44,16 @@ jobs:
         with:
           python-version: "3.12"
 
+      # GitHub's Ubuntu runners default to an Azure-hosted apt mirror
+      # (azure.archive.ubuntu.com) that's known to intermittently hang for
+      # 20+ minutes — hit this on 2026-08-18, stalling the very next apt-get
+      # call (`playwright install --with-deps` below). Point at the
+      # standard Ubuntu mirror instead, which doesn't have this problem.
+      - name: Work around flaky default Ubuntu apt mirror on GitHub runners
+        run: |
+          sudo sed -i 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' \
+            /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+
       - name: Configure git auth for the private rule-catalog dependency
         run: |
           git config --global url."https://x-access-token:${RULES_REPO_TOKEN}@github.com/".insteadOf "https://github.com/"
