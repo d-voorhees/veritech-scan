@@ -4,7 +4,7 @@
 
 Current version: **v5** — see [CHANGELOG.md](CHANGELOG.md) for full release history.
 
-Read the build story on dVoorhees.com: [Building a Technical Due Diligence Scanner for Web-Business Buyers](https://dvoorhees.com/2026/08/15/building-a-technical-due-diligence-scanner-for-web-business-buyers/) *(unconfirmed — post not yet published; URL predicted from the site's date/slug convention)*.
+Read the build story [Building a Technical Due Diligence Scanner for Web-Business Buyers](https://dvoorhees.com/2026/08/15/building-a-technical-due-diligence-scanner-for-web-business-buyers/).
 
 Veritech Scan is a product of [Veritech Diligence](https://veritechdiligence.com).
 Veritech Diligence provides technical due diligence for buyers of web-based
