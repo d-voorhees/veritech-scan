@@ -4,6 +4,8 @@
 
 Current version: **v4** — see [CHANGELOG.md](CHANGELOG.md) for full release history.
 
+Read the build story on dVoorhees.com: [Building a Technical Due Diligence Scanner for Web-Business Buyers](https://dvoorhees.com/2026/08/15/building-a-technical-due-diligence-scanner-for-web-business-buyers/) *(unconfirmed — post not yet published; URL predicted from the site's date/slug convention)*.
+
 Veritech Scan is a product of [Veritech Diligence](https://veritechdiligence.com).
 Veritech Diligence provides technical due diligence for buyers of web-based
 businesses. Veritech Scan is a bounded, rate-limited, public-web technical
@@ -378,6 +380,12 @@ Scan-runner Machines self-destruct after a scan (`config.auto_destroy`);
 Fly keeps a Machine around for ~2 hours after a *non-zero* exit
 specifically so you can inspect it before it's cleaned up automatically.
 See `docs/fly-operations.md` for detail.
+
+## License
+
+Proprietary. All rights reserved. Veritech Scan is a commercial product of
+[Veritech Diligence](https://veritechdiligence.com); this source is not
+licensed for reuse, redistribution, or derivative works.
 
 ## Changelog
 
