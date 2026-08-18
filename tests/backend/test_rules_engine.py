@@ -449,7 +449,7 @@ def test_rule_result_requires_dollar_impact_and_remediation_timing():
     call time instead of silently shipping a half-labeled finding —
     Priority 3 explicitly asks that every rule get both fields or the
     whole priority be held."""
-    from app.rules.definitions import RuleResult
+    from veritech_scan_rules import RuleResult
 
     with pytest.raises(TypeError):
         RuleResult(

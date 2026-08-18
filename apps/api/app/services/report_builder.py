@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
 from sqlalchemy.orm import Session, joinedload
+from veritech_scan_rules import RULE_CATALOG
 
 from app.collectors.dependency_classification import known_vendor_name
 from app.collectors.dns_checks import COMMON_DKIM_SELECTORS
@@ -18,7 +19,6 @@ from app.models.observation import (
 from app.models.finding import REGISTER_SEVERITIES
 from app.models.page import Page
 from app.models.scan import JOB_STATUS_FAILED, ScanJob, ScanRequest
-from app.rules.definitions import RULE_CATALOG
 from app.schemas.evidence import EvidenceItemOut, FindingOut
 from app.schemas.report import FindingSeverityCounts, LimitationOut, ReportOut
 

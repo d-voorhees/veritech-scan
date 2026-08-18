@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Veritech Scan — two production images for Fly.io, built from one
 # Dockerfile (see scripts/entrypoint.sh for the runtime role dispatch):
 #
@@ -64,7 +65,20 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY apps/api/requirements.txt ./apps/api/requirements.txt
-RUN pip install --no-cache-dir -r apps/api/requirements.txt
+# requirements.txt pulls in the private veritech-scan-rules package over
+# plain https:// (no credential in the URL, safe in a public repo — see
+# docs/rules-engine.md). Resolving it here needs a token, supplied only as
+# a BuildKit secret (`fly deploy --build-secret rules_token=...` /
+# `docker build --secret id=rules_token,env=RULES_REPO_TOKEN`) so it's
+# never written into an image layer. The git-config rewrite and its
+# `--unset` both happen inside this one RUN, so even though `git config
+# --global` touches a real file (~/.gitconfig, not the secret's tmpfs
+# mount), that file is back to having no credential in it by the time this
+# layer is committed.
+RUN --mount=type=secret,id=rules_token \
+    git config --global url."https://x-access-token:$(cat /run/secrets/rules_token)@github.com/".insteadOf "https://github.com/" \
+    && pip install --no-cache-dir -r apps/api/requirements.txt \
+    && git config --global --unset url."https://x-access-token:$(cat /run/secrets/rules_token)@github.com/".insteadOf
 
 COPY apps/api ./apps/api
 

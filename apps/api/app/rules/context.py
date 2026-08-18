@@ -1,31 +1,15 @@
 import uuid
-from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
+from veritech_scan_rules import RuleContext
 
 from app.models.evidence import EvidenceItem
 from app.models.observation import DNSObservation, HTTPObservation, PerformanceObservation, ThirdPartyDependency
 from app.models.page import Page
-from app.models.scan import ScanRequest
+from app.models.scan import JOB_STATUS_FAILED, ScanJob, ScanRequest
+from app.models.observation import TechnologyObservation
 
-
-@dataclass
-class RuleContext:
-    db: Session
-    scan: ScanRequest
-    dns_observations: list[DNSObservation]
-    http_observation: HTTPObservation | None
-    pages: list[Page]
-    homepage: Page | None
-    third_party_deps: list[ThirdPartyDependency]
-    performance: PerformanceObservation | None
-    evidence_ids: dict[str, uuid.UUID | None] = field(default_factory=dict)
-
-    def dns_by_type(self, record_type: str) -> DNSObservation | None:
-        return next((o for o in self.dns_observations if o.record_type == record_type), None)
-
-    def dns_all_by_type(self, record_type: str) -> list[DNSObservation]:
-        return [o for o in self.dns_observations if o.record_type == record_type]
+__all__ = ["RuleContext", "build_rule_context"]
 
 
 def build_rule_context(db: Session, scan: ScanRequest) -> RuleContext:
@@ -50,26 +34,39 @@ def build_rule_context(db: Session, scan: ScanRequest) -> RuleContext:
         .first()
     )
 
-    def first_evidence_id(category: str, source_type: str | None = None) -> uuid.UUID | None:
+    def first_evidence_item(category: str, source_type: str | None = None) -> EvidenceItem | None:
         q = db.query(EvidenceItem).filter(
             EvidenceItem.scan_request_id == scan.id, EvidenceItem.category == category
         )
         if source_type:
             q = q.filter(EvidenceItem.source_type == source_type)
-        item = q.order_by(EvidenceItem.captured_at).first()
+        return q.order_by(EvidenceItem.captured_at).first()
+
+    def item_id(item: EvidenceItem | None) -> uuid.UUID | None:
         return item.id if item else None
 
+    http_evidence_item = first_evidence_item("http", "http_response")
+    sitemap_evidence = first_evidence_item("robots_sitemap", "sitemap_xml")
+
     evidence_ids = {
-        "email_posture": first_evidence_id("email_posture", "spf_dmarc_lookup"),
-        "http": first_evidence_id("http", "http_response"),
-        "sitemap": first_evidence_id("robots_sitemap", "sitemap_xml"),
-        "crawl": first_evidence_id("crawl", "bounded_crawl"),
-        "homepage_snapshot": first_evidence_id("crawl", "page_snapshot"),
-        "performance": first_evidence_id("performance", "performance_measurement"),
+        "email_posture": item_id(first_evidence_item("email_posture", "spf_dmarc_lookup")),
+        "http": item_id(http_evidence_item),
+        "sitemap": item_id(sitemap_evidence),
+        "crawl": item_id(first_evidence_item("crawl", "bounded_crawl")),
+        "homepage_snapshot": item_id(first_evidence_item("crawl", "page_snapshot")),
+        "performance": item_id(first_evidence_item("performance", "performance_measurement")),
     }
 
+    technology_observations = (
+        db.query(TechnologyObservation).filter(TechnologyObservation.scan_request_id == scan.id).all()
+    )
+    failed_scan_jobs = (
+        db.query(ScanJob)
+        .filter(ScanJob.scan_request_id == scan.id, ScanJob.status == JOB_STATUS_FAILED)
+        .all()
+    )
+
     return RuleContext(
-        db=db,
         scan=scan,
         dns_observations=dns_observations,
         http_observation=http_observation,
@@ -77,5 +74,15 @@ def build_rule_context(db: Session, scan: ScanRequest) -> RuleContext:
         homepage=homepage,
         third_party_deps=third_party_deps,
         performance=performance,
+        technology_observations=technology_observations,
+        failed_scan_jobs=failed_scan_jobs,
+        http_evidence_item=http_evidence_item,
+        sitemap_evidence=sitemap_evidence,
+        first_browser_render_evidence=first_evidence_item("browser_render"),
+        playwright_render_evidence=first_evidence_item("browser_render", "playwright_render"),
+        exposure_evidence=first_evidence_item("exposure", "endpoint_probe"),
+        tls_evidence=first_evidence_item("tls", "tls_certificate"),
+        domain_registration_evidence=first_evidence_item("domain_registration", "rdap_lookup"),
+        accessibility_evidence=first_evidence_item("accessibility", "static_accessibility_scan"),
         evidence_ids=evidence_ids,
     )

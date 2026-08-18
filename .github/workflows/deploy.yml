@@ -44,6 +44,12 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Configure git auth for the private rule-catalog dependency
+        run: |
+          git config --global url."https://x-access-token:${RULES_REPO_TOKEN}@github.com/".insteadOf "https://github.com/"
+        env:
+          RULES_REPO_TOKEN: ${{ secrets.RULES_REPO_TOKEN }}
+
       - name: Install backend dependencies
         working-directory: apps/api
         run: |
@@ -90,9 +96,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: superfly/flyctl-actions/setup-flyctl@master
       - name: Deploy to Fly.io
-        run: flyctl deploy --remote-only --app veritech-scan
+        run: >
+          flyctl deploy --remote-only --app veritech-scan
+          --build-secret rules_token="$RULES_REPO_TOKEN"
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          RULES_REPO_TOKEN: ${{ secrets.RULES_REPO_TOKEN }}
       - name: Run database migrations
         run: ./scripts/migrate-fly.sh
         env:

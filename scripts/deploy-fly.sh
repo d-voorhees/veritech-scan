@@ -12,10 +12,15 @@
 # _scan_runner_image_ref() there for why this can't just reuse
 # FLY_IMAGE_REF.
 #
-# Usage: FLY_APP_NAME=veritech-scan ./scripts/deploy-fly.sh [extra flyctl args]
+# Usage: FLY_APP_NAME=veritech-scan RULES_REPO_TOKEN=... ./scripts/deploy-fly.sh [extra flyctl args]
 set -euo pipefail
 
 : "${FLY_APP_NAME:?Set FLY_APP_NAME (see docs/fly-deployment.md)}"
+# Read-only, repo-scoped fine-grained PAT for the private veritech-scan-rules
+# dependency (Dockerfile's pip install needs it) — see docs/rules-engine.md's
+# "Private rule catalog" section. In CI this comes from the RULES_REPO_TOKEN
+# Actions secret automatically; a manual/local deploy needs it exported first.
+: "${RULES_REPO_TOKEN:?Set RULES_REPO_TOKEN (see docs/rules-engine.md)}"
 
 if ! command -v flyctl >/dev/null 2>&1 && ! command -v fly >/dev/null 2>&1; then
   echo "flyctl is required (https://fly.io/docs/flyctl/install/) — no Docker needed." >&2
@@ -23,11 +28,13 @@ if ! command -v flyctl >/dev/null 2>&1 && ! command -v fly >/dev/null 2>&1; then
 fi
 FLY_BIN="$(command -v flyctl || command -v fly)"
 
-"$FLY_BIN" deploy --remote-only --app "$FLY_APP_NAME" "$@"
+"$FLY_BIN" deploy --remote-only --app "$FLY_APP_NAME" \
+  --build-secret rules_token="$RULES_REPO_TOKEN" "$@"
 
 echo "Building and pushing the scan-runner image (Playwright/Chromium)..."
 "$FLY_BIN" deploy --remote-only --build-only --push --app "$FLY_APP_NAME" \
-  --build-target scan-runner --image-label scan-runner-latest
+  --build-target scan-runner --image-label scan-runner-latest \
+  --build-secret rules_token="$RULES_REPO_TOKEN"
 
 cat <<EOF
 

@@ -2,10 +2,11 @@ import uuid
 
 from sqlalchemy.orm import Session
 
+from veritech_scan_rules import RuleResult, all_rules
+
 from app.models.finding import Finding, FindingEvidence, FindingRule
 from app.models.scan import ScanRequest
 from app.rules.context import build_rule_context
-from app.rules.definitions import RuleResult, all_rules
 
 
 def _get_or_create_rule(db: Session, result: RuleResult) -> FindingRule:

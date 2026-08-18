@@ -19,6 +19,11 @@ rotation).
   `fly deploy --remote-only` builds the image on Fly's own infrastructure.
 - `jq` (used by `scripts/migrate-fly.sh` and
   `scripts/fly-scan-runner-test.sh`).
+- A fine-grained GitHub PAT with read-only access to the private
+  `veritech-scan-rules` repo, exported as `RULES_REPO_TOKEN` — needed only
+  for a manual/local `make fly-deploy` (CI already has this as a repository
+  secret and doesn't need anything from you). See `docs/rules-engine.md`'s
+  "Private rule catalog" section for what it's for and how to generate one.
 
 ## 1. Create the app (`make fly-init`)
 
@@ -86,6 +91,7 @@ Notes:
 ## 4. Deploy (`make fly-deploy`)
 
 ```bash
+export RULES_REPO_TOKEN=...   # see "Prerequisites" above
 make fly-deploy
 ```
 
