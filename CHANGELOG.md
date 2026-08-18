@@ -17,6 +17,20 @@ All notable changes to this project are documented in this file.
   models or database — see `docs/rules-engine.md`'s "Private rule catalog"
   section for the full architecture and how each environment (local, CI,
   Fly build) authenticates to install it.
+- **CI hardened against silent hangs.** Rolling out the private-package
+  dependency above surfaced two real CI problems on the same day: `git`
+  wasn't installed in the Dockerfile's base image (the private dependency
+  couldn't resolve during the Fly build), and GitHub's default
+  `azure.archive.ubuntu.com` apt mirror hung for 20-30+ minutes mid-`test`-job
+  with nothing bounding how long a step could run. Fixed all three:
+  `.github/workflows/deploy.yml` now points apt at the standard Ubuntu
+  mirror before any apt-get call, caches the Playwright Chromium binary
+  (`actions/cache`, keyed on `requirements.txt`) so most runs skip that
+  network download entirely, and sets `timeout-minutes` at both the job
+  level (`test`: 20, `deploy`: 25) and specifically on the install step that
+  hung (5) — so a stuck step now fails loudly within minutes instead of
+  silently for half an hour. The Dockerfile's `runtime-base` stage installs
+  `git` alongside its existing `curl`/`ca-certificates`/`gnupg` packages.
 
 ## v4 — 2026-08-13
 
