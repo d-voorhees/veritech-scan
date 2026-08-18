@@ -57,8 +57,10 @@ FROM python:3.12-slim-bookworm AS runtime-base
 
 # Node.js runtime (only the binary is needed — the standalone Next.js build
 # already bundles its own pruned node_modules, so no npm install here).
+# git is needed below to resolve the private veritech-scan-rules dependency
+# (a git+https:// URL in requirements.txt) — not present in the base image.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl ca-certificates gnupg \
+    && apt-get install -y --no-install-recommends curl ca-certificates gnupg git \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
