@@ -2,7 +2,7 @@
 
 **Evidence-first technical pre-screening for web-business acquisitions.**
 
-Current version: **v4** — see [CHANGELOG.md](CHANGELOG.md) for full release history.
+Current version: **v5** — see [CHANGELOG.md](CHANGELOG.md) for full release history.
 
 Read the build story on dVoorhees.com: [Building a Technical Due Diligence Scanner for Web-Business Buyers](https://dvoorhees.com/2026/08/15/building-a-technical-due-diligence-scanner-for-web-business-buyers/) *(unconfirmed — post not yet published; URL predicted from the site's date/slug convention)*.
 
@@ -387,6 +387,13 @@ Proprietary. All rights reserved. Veritech Scan is a commercial product of
 [Veritech Diligence](https://veritechdiligence.com); this source is not
 licensed for reuse, redistribution, or derivative works.
 
+The rules engine's actual rule catalog — every detection condition,
+threshold, and the dollar-impact/remediation-timing methodology — lives in
+a separate private package (`veritech-scan-rules`), not in this repo. This
+app depends on it like any other pip package; it isn't publicly installable.
+See [`docs/rules-engine.md`](docs/rules-engine.md) for the architecture this
+plugs into.
+
 ## Changelog
 
 See [`CHANGELOG.md`](CHANGELOG.md) for notable fixes and changes.
@@ -397,7 +404,8 @@ See [`CHANGELOG.md`](CHANGELOG.md) for notable fixes and changes.
   scan-runners are on-demand Fly Machines instead of a persistent worker,
   the full scan initiation flow, collection/evidence/rules/report flow.
 - [`docs/rules-engine.md`](docs/rules-engine.md) — rule architecture,
-  versioning, the full rule catalog, how to add a rule safely.
+  versioning, the full rule catalog, how to add a rule safely, and why the
+  rule implementations themselves are a private dependency, not in this repo.
 - [`docs/threat-model.md`](docs/threat-model.md) — SSRF prevention, crawl
   boundaries, authorization, isolation, rate limiting, explicit non-goals.
 - [`docs/fly-deployment.md`](docs/fly-deployment.md) — exact Fly.io initial

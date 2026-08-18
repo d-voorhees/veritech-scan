@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## v5 — 2026-08-18
+
+### Changed
+
+- **Rule catalog extracted to a private package.** The rules engine's
+  detection logic — every rule's condition, threshold, and dollar-impact/
+  remediation-timing assignment — moved out of this repo into a separate
+  private package, `veritech-scan-rules`, pulled in as a normal pip
+  dependency (`apps/api/requirements.txt`, pinned to a tag). No behavior
+  change: `RuleContext` now carries every piece of evidence a rule might
+  need as plain pre-fetched data (several rules previously queried the
+  database directly), so rule functions have zero dependency on this app's
+  models or database — see `docs/rules-engine.md`'s "Private rule catalog"
+  section for the full architecture and how each environment (local, CI,
+  Fly build) authenticates to install it.
+
 ## v4 — 2026-08-13
 
 ### Added
