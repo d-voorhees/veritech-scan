@@ -13,6 +13,23 @@ class LoginResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class RequestLinkRequest(BaseModel):
+    email: EmailStr
+
+
+class RequestLinkResponse(BaseModel):
+    message: str = "If that email is valid, a sign-in link is on its way."
+
+
+class VerifyTokenRequest(BaseModel):
+    token: str
+
+
+class VerifyTokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
 class MeResponse(BaseModel):
     id: uuid.UUID
     email: str

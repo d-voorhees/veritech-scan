@@ -2,7 +2,7 @@
 
 **Evidence-first technical pre-screening for web-business acquisitions.**
 
-Current version: **v5** — see [CHANGELOG.md](CHANGELOG.md) for full release history.
+Current version: **v6** — see [CHANGELOG.md](CHANGELOG.md) for full release history.
 
 Read the build story [Building a Technical Due Diligence Scanner for Web-Business Buyers](https://dvoorhees.com/2026/08/15/building-a-technical-due-diligence-scanner-for-web-business-buyers/).
 
@@ -23,9 +23,14 @@ It answers one practical question for a prospective buyer:
 
 - A public marketing homepage at `/`, branded to match
   [veritechdiligence.com](https://veritechdiligence.com) (type, color,
-  layout), with "Sign in" and "Request access" calls to action. The
-  authenticated app lives at `/dashboard`.
-- Invite-only, authenticated app (no public signup).
+  layout), with a "Start a free scan" call to action. The authenticated app
+  lives at `/dashboard`.
+- **Self-serve, passwordless signup — free launch pass.** No invite needed:
+  enter an email at `/login`, get a single-use magic link, and start
+  scanning. Every scan is free for this pass — no payment processor, no
+  enforced cap (a `scans_used` counter is tracked per user so a cap can be
+  added later without a schema change). Password sign-in remains available
+  for existing accounts.
 - Submit a domain/URL + business notes + crawl depth (10/25/50 pages) +
   a required authorization acknowledgment.
 - An on-demand scan pipeline (no persistent worker, no Redis — see
@@ -198,6 +203,12 @@ full walkthrough of every value:
 | `INITIAL_ADMIN_EMAIL`, `INITIAL_ADMIN_PASSWORD` | Bootstrap admin account (`make seed`/`app.seed --admin-only`). |
 | `GOOGLE_PAGESPEED_API_KEY` | Optional — enables PageSpeed Insights metrics in the performance section. |
 | `SENTRY_DSN` | Optional — error reporting. |
+| `BREVO_API_KEY` | Sends the magic-link email and the post-scan contact-attribute sync. Must be paired with a `BREVO_SENDER_EMAIL` that's a verified sender in the Brevo account. |
+| `BREVO_SENDER_EMAIL`, `BREVO_SENDER_NAME` | Sender identity on every Brevo send. |
+| `BREVO_MAGIC_LINK_TEMPLATE_ID` | Optional — a Brevo transactional template ID for the magic-link email. Unset falls back to plain inline HTML. |
+| `MAILERLITE_API_KEY`, `MAILERLITE_GROUP_ID` | Adds a verified signup to this MailerLite group on first magic-link verification. |
+| `SLACK_WEBHOOK_URL` | Optional — a Slack Incoming Webhook URL. Posts a notification on scan start and scan completion; unset means no notification is sent. |
+| `RESULTS_NOTIFICATION_EMAIL` | Optional — inbox that gets a full copy of each completed scan's report via Brevo. Unset means no email is sent. |
 
 ### Database requirements
 
@@ -307,7 +318,8 @@ Summarized here; full detail in `docs/threat-model.md`:
 - Never submits forms, authenticates, solves CAPTCHAs, or bypasses access
   controls.
 - Ephemeral browser context per scan — no cookie/session persistence.
-- Scan creation is rate-limited per user; the app is invite-only.
+- Scan creation is rate-limited per user; magic-link requests are rate-limited
+  per IP (5/hr) to prevent using signup as an email-spam vector.
 
 ## Known limitations
 
@@ -328,7 +340,9 @@ Summarized here; full detail in `docs/threat-model.md`:
 - **The database is a persistent, paid dependency**, billed and managed
   separately from Fly (a different provider, a different invoice) — Neon
   Postgres doesn't scale to zero at the tier this project uses.
-- **No public signup** — invite-only by design; see `docs/threat-model.md`.
+- **No enforced scan cap.** `scans_used` is tracked per user but nothing
+  currently reads it to block a scan — every scan is free for this launch
+  pass; there is no payment processor or paywall.
 - **Finite scan resource/time limits.** `SCAN_MAX_TOTAL_MINUTES` (default
   10) and the 10/25/50 page caps bound every scan; browser rendering covers
   the homepage only, not every crawled page.

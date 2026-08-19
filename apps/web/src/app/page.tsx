@@ -107,8 +107,26 @@ export default function HomePage() {
         .landing .btn-primary .arrow { transition: transform 0.15s ease; display: inline-block; }
         .landing .btn-primary:hover .arrow { transform: translateX(3px); }
 
+        .landing .btn-secondary {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          color: var(--ink);
+          text-decoration: none;
+          border-bottom: 1px solid var(--ink);
+          padding: 14px 0;
+          font-size: 15px;
+          font-weight: 500;
+          transition: gap 0.15s ease;
+        }
+
+        .landing .btn-secondary:hover { gap: 12px; }
+
+        .landing .btn-secondary .arrow { transition: transform 0.15s ease; display: inline-block; }
+        .landing .btn-secondary:hover .arrow { transform: translateX(2px); }
+
         @media (prefers-reduced-motion: reduce) {
-          .landing .btn-primary, .landing .arrow { transition: none; }
+          .landing .btn-primary, .landing .btn-secondary, .landing .arrow { transition: none; }
         }
 
         /* ---------- Sections ---------- */
@@ -255,14 +273,8 @@ export default function HomePage() {
 
             <div className="cta-row">
               <Link href="/login" className="btn-primary">
-                Sign in <span className="arrow">→</span>
+                Start a free scan <span className="arrow">→</span>
               </Link>
-              <a
-                href="mailto:hello@veritechdiligence.com?subject=Veritech%20Site%20Checker%20access"
-                className="btn-secondary"
-              >
-                Request access <span className="arrow">→</span>
-              </a>
             </div>
           </div>
         </div>
@@ -421,21 +433,15 @@ export default function HomePage() {
         <div className="outer">
           <div className="access-inner">
             <p className="eyebrow">Access</p>
-            <h2>Access is invite-only right now.</h2>
+            <h2>Every scan is free right now.</h2>
             <p>
-              Veritech Site Checker is in early access. If you already have an invitation, sign in below and run your first
-              analysis. If you don&rsquo;t and want one, reach out and we&rsquo;ll get you set up.
+              Veritech Site Checker is in early access. Enter your email, we&rsquo;ll send you a sign-in link, and you can
+              run your first scan right away &mdash; no invitation needed.
             </p>
             <div className="cta-row">
               <Link href="/login" className="btn-primary">
-                Sign in <span className="arrow">→</span>
+                Start a free scan <span className="arrow">→</span>
               </Link>
-              <a
-                href="mailto:hello@veritechdiligence.com?subject=Veritech%20Site%20Checker%20access"
-                className="btn-secondary"
-              >
-                Request access <span className="arrow">→</span>
-              </a>
             </div>
           </div>
         </div>

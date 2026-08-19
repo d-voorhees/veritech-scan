@@ -22,6 +22,7 @@ from app.models.scan import (
 from app.models.user import User
 from app.schemas.scan import ScanCreateRequest
 from app.services.fly_machines import FlyMachinesClient, FlyMachinesError
+from app.services.slack_client import SlackError, send_slack_notification
 
 logger = get_logger(__name__)
 
@@ -76,9 +77,27 @@ def create_scan(db: Session, user: User, payload: ScanCreateRequest) -> ScanRequ
     for task_name in COLLECTION_TASK_NAMES:
         db.add(ScanJob(scan_request_id=scan.id, task_name=task_name, status=JOB_STATUS_PENDING))
 
+    # Counter only, per the free-launch pass: nothing reads this to block a
+    # scan, it exists so a cap can be wired in later without a schema change.
+    user.scans_used += 1
+
     record_event(db, scan.id, "scan_queued", f"Scan queued for {validated.hostname}.")
     db.commit()
     db.refresh(scan)
+
+    try:
+        send_slack_notification(
+            get_settings().slack_webhook_url,
+            (
+                "*:rotating_light: VERITECH SITE CHECKER — New Scan Signup*\n"
+                "Someone just signed up to run a scan.\n"
+                f"*Email:* {user.email}\n"
+                f"*Target:* {validated.hostname}"
+            ),
+        )
+    except SlackError as exc:
+        logger.warning("slack_scan_started_notification_failed", scan_id=str(scan.id), error=str(exc))
+
     return scan
 
 

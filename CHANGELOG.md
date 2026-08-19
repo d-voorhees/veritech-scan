@@ -2,6 +2,59 @@
 
 All notable changes to this project are documented in this file.
 
+## v6 — 2026-08-19
+
+### Added
+
+- **Self-serve, passwordless signup — free-launch pass, no invite required.**
+  Replaces the invite-only entry point (there was no technical gate to tear
+  out — accounts were only ever created by hand — so this is additive, not a
+  removal). `POST /auth/request-link` looks up or creates a user by email and
+  emails a single-use magic link (`POST /auth/verify` redeems it); tokens are
+  SHA-256-hashed at rest (`magic_link_tokens`, migration `b8a2f5d13c90`),
+  20-minute expiry, single-use regardless of expiry, and the request endpoint
+  is rate-limited per IP (5/hr) to prevent using it to spam arbitrary
+  addresses. Password sign-in still works for the existing admin account
+  (`/login`'s "Sign in with a password instead" toggle) — `users.hashed_password`
+  is now nullable for magic-link-only accounts. Every scan is free for this
+  pass; no payment processor or scan cap was added. A `scans_used` counter is
+  tracked on each user (incremented per scan, `scan_orchestrator.create_scan`)
+  so a cap can be wired in later without another schema change — nothing
+  currently reads it to block anything.
+- **First Brevo integration in this codebase.** `app/services/brevo_client.py`
+  sends the magic-link email (Brevo template if `BREVO_MAGIC_LINK_TEMPLATE_ID`
+  is set, otherwise a plain inline-HTML fallback so the flow is testable
+  before a template exists) and, on scan completion, pushes a lean summary to
+  the user's Brevo contact record as attributes (`LAST_SCAN_URL`,
+  `LAST_SCAN_DATE`, `LAST_SCAN_RISK_LEVEL`, `LAST_SCAN_TOP_FINDING`,
+  `LAST_SCAN_FINDING_COUNT_RED`, `LAST_SCAN_FINDING_COUNT_YELLOW`) to drive an
+  existing post-report email automation. The summary is also persisted
+  (`reports.brevo_summary_json`) so it never needs recomputing. Risk level
+  and the red/yellow split are new derived logic (high→red, medium→yellow) —
+  nothing in the report schema previously carried an "overall risk" concept.
+  A Brevo failure never blocks the scan or the auth response; it's logged and
+  left to retry out of band.
+- **MailerLite group sync.** On a user's *first* successful magic-link
+  verification (never on link request, so unverified/mistyped addresses
+  never reach MailerLite), `app/services/mailerlite_client.py` upserts the
+  contact into the configured group without disturbing any other group
+  membership, and stamps `users.mailerlite_synced_at`.
+- **Slack notifications for scan start and scan completion**, plus a full
+  results-copy email. Both post/send from `app/services/scan_orchestrator.py`
+  (scan created) and `app/runner/run.py` (scan completed, alongside the
+  Brevo push), each independently try/excepted so a Slack or email outage
+  never affects the scan itself. Messages lead with a bold "VERITECH SITE
+  CHECKER" title line so they're unmistakable in a shared channel. The
+  completion email sends the full rendered report HTML to one configured
+  inbox (`RESULTS_NOTIFICATION_EMAIL`) via the same Brevo client.
+- New env vars (see `.env.example`, and the README's Fly secrets table):
+  `MAGIC_LINK_TOKEN_EXPIRES_MINUTES`, `MAGIC_LINK_REQUEST_RATE_LIMIT_PER_HOUR`,
+  `BREVO_API_KEY`, `BREVO_SENDER_EMAIL`, `BREVO_SENDER_NAME`,
+  `BREVO_MAGIC_LINK_TEMPLATE_ID`, `MAILERLITE_API_KEY`, `MAILERLITE_GROUP_ID`,
+  `SLACK_WEBHOOK_URL`, `RESULTS_NOTIFICATION_EMAIL`. Passwordless sessions
+  reuse the existing `JWT_SECRET`/`APP_URL` rather than adding a second
+  session secret or base-URL variable for the same purpose.
+
 ## v5 — 2026-08-18
 
 ### Changed

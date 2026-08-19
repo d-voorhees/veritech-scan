@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -48,6 +49,36 @@ class Settings(BaseSettings):
 
     google_pagespeed_api_key: str = ""
     sentry_dsn: str = ""
+
+    # --- Magic-link auth + Brevo/MailerLite (see docs on the free-launch
+    # signup build). Session cookies for magic-link users reuse
+    # jwt_secret/JWT_SECRET above — same cookie, same signing purpose as
+    # password login, not a different one, so no separate session secret.
+    # The verify link's base URL reuses app_url/APP_URL for the same reason.
+    magic_link_token_expires_minutes: int = 20
+    magic_link_request_rate_limit_per_hour: int = 5
+
+    brevo_api_key: str = ""
+    brevo_magic_link_template_id: int | None = None
+    # Must be a sender verified in the Brevo account, or transactional sends
+    # are rejected outright.
+    brevo_sender_email: str = ""
+    brevo_sender_name: str = "Veritech Site Checker"
+
+    mailerlite_api_key: str = ""
+    mailerlite_group_id: str = "196262875934754744"
+
+    # Slack Incoming Webhook for scan-lifecycle notifications, and the
+    # inbox that gets a copy of every completed scan's results.
+    slack_webhook_url: str = ""
+    results_notification_email: str = ""
+
+    @field_validator("brevo_magic_link_template_id", mode="before")
+    @classmethod
+    def _blank_template_id_is_unset(cls, value: object) -> object:
+        # An unset BREVO_MAGIC_LINK_TEMPLATE_ID env var arrives as "", which
+        # doesn't parse as int | None on its own.
+        return None if value == "" else value
 
     artifact_storage_backend: str = "local"
     artifact_storage_local_path: str = "/data/artifacts"

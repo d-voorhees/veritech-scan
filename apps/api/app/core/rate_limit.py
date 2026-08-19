@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
+from app.models.magic_link_token import MagicLinkToken
 from app.models.scan import ScanRequest
 
 
@@ -30,4 +31,29 @@ def enforce_scan_creation_rate_limit(db: Session, user_id: uuid.UUID) -> None:
     if count >= limit:
         raise RateLimitExceeded(
             f"Scan creation limit reached ({limit} per hour). Please try again later."
+        )
+
+
+def enforce_magic_link_request_rate_limit(db: Session, requested_ip: str | None) -> None:
+    """Rolling-hour count of magic-link requests from one IP, so the
+    request-link endpoint can't be used to spam arbitrary email addresses.
+    An unknown IP (requested_ip is None) is never rate-limited here — that
+    would rate-limit every unknown-IP caller as one shared bucket.
+    """
+    if not requested_ip:
+        return
+
+    settings = get_settings()
+    limit = settings.magic_link_request_rate_limit_per_hour
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
+
+    count = (
+        db.query(MagicLinkToken)
+        .filter(MagicLinkToken.requested_ip == requested_ip, MagicLinkToken.created_at >= cutoff)
+        .count()
+    )
+
+    if count >= limit:
+        raise RateLimitExceeded(
+            f"Too many sign-in link requests ({limit} per hour). Please try again later."
         )

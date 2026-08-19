@@ -48,3 +48,21 @@ export function useLogout() {
     },
   });
 }
+
+export function useRequestMagicLink() {
+  return useMutation({
+    mutationFn: (email: string) => api.requestMagicLink(email),
+  });
+}
+
+export function useVerifyMagicLink() {
+  const queryClient = useQueryClient();
+  const router = useRouter();
+  return useMutation({
+    mutationFn: (token: string) => api.verifyMagicLink(token),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["me"] });
+      router.push("/dashboard");
+    },
+  });
+}

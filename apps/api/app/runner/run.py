@@ -36,11 +36,15 @@ from app.models.scan import (
     ScanRequest,
     ScanTarget,
 )
+from app.models.user import User
 from app.rules.engine import run_rules_engine
 from app.services.artifact_storage import get_artifact_storage
+from app.services.brevo_client import BrevoClient, BrevoError
 from app.services.html_export import render_report_html
 from app.services.report_builder import build_report
+from app.services.report_summary import build_brevo_summary
 from app.services.scan_orchestrator import record_event
+from app.services.slack_client import SlackError, send_slack_notification
 
 logger = get_logger(__name__)
 
@@ -304,14 +308,69 @@ def run_scan(scan_id: str, runner_machine_id: str | None = None) -> int:
                 html = render_report_html(report)
                 storage = get_artifact_storage()
                 path = storage.save(f"{scan.id}/report.html", html.encode("utf-8"))
-                db.add(
-                    Report(
-                        scan_request_id=scan.id,
-                        format="html",
-                        storage_path=path,
-                        generated_at=datetime.now(timezone.utc),
-                    )
+
+                report_row = Report(
+                    scan_request_id=scan.id,
+                    format="html",
+                    storage_path=path,
+                    generated_at=datetime.now(timezone.utc),
                 )
+
+                if scan.status in (SCAN_STATUS_COMPLETED, SCAN_STATUS_COMPLETED_WITH_WARNINGS):
+                    # A Brevo push failure must never affect a scan the user
+                    # can already see the report for, so it's wrapped
+                    # separately from the report-row write above it.
+                    try:
+                        report_url = f"{settings.app_url}/scans/{scan.id}"
+                        summary = build_brevo_summary(report, report_url)
+                        report_row.brevo_summary_json = summary
+                        user = db.get(User, scan.user_id)
+                        if user and settings.brevo_api_key:
+                            with BrevoClient(settings.brevo_api_key) as brevo:
+                                brevo.upsert_contact(
+                                    email=user.email,
+                                    attributes={
+                                        "LAST_SCAN_URL": summary["last_scan_url"],
+                                        "LAST_SCAN_DATE": summary["last_scan_date"],
+                                        "LAST_SCAN_RISK_LEVEL": summary["last_scan_risk_level"],
+                                        "LAST_SCAN_TOP_FINDING": summary["last_scan_top_finding"],
+                                        "LAST_SCAN_FINDING_COUNT_RED": summary["last_scan_finding_count_red"],
+                                        "LAST_SCAN_FINDING_COUNT_YELLOW": summary["last_scan_finding_count_yellow"],
+                                    },
+                                )
+                    except BrevoError as exc:
+                        logger.warning("brevo_scan_summary_sync_failed", scan_id=scan_id, error=str(exc))
+
+                    # Each of the two notifications below is independently
+                    # wrapped — a Slack outage must never prevent the
+                    # results-copy email, and vice versa.
+                    try:
+                        send_slack_notification(
+                            settings.slack_webhook_url,
+                            (
+                                "*:white_check_mark: VERITECH SITE CHECKER — Scan Completed*\n"
+                                f"*Domain:* {scan.normalized_domain}\n"
+                                f"*Status:* {scan.status}\n"
+                                f"*Report:* {report_url}"
+                            ),
+                        )
+                    except SlackError as exc:
+                        logger.warning("slack_scan_completed_notification_failed", scan_id=scan_id, error=str(exc))
+
+                    if settings.results_notification_email and settings.brevo_api_key:
+                        try:
+                            with BrevoClient(settings.brevo_api_key) as brevo:
+                                brevo.send_html_email(
+                                    to_email=settings.results_notification_email,
+                                    sender_email=settings.brevo_sender_email,
+                                    sender_name=settings.brevo_sender_name,
+                                    subject=f"Scan completed: {scan.normalized_domain}",
+                                    html_content=html,
+                                )
+                        except BrevoError as exc:
+                            logger.warning("results_copy_email_failed", scan_id=scan_id, error=str(exc))
+
+                db.add(report_row)
                 record_event(db, scan.id, "report_finalized", "Report generated and stored.")
                 db.commit()
             except Exception as exc:  # noqa: BLE001

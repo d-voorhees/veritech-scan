@@ -180,6 +180,16 @@ export const api = {
     }),
   logout: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
   me: () => request<Me>("/auth/me"),
+  requestMagicLink: (email: string) =>
+    request<{ message: string }>("/auth/request-link", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+  verifyMagicLink: (token: string) =>
+    request<{ access_token: string; token_type: string }>("/auth/verify", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    }),
 
   listScans: () => request<ScanSummary[]>("/scans"),
   getScan: (id: string) => request<ScanDetail>(`/scans/${id}`),
