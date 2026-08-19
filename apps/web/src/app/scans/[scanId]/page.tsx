@@ -298,6 +298,24 @@ export default function ScanDetailPage({ params }: { params: Promise<{ scanId: s
               </ul>
             </CardContent>
           </Card>
+
+          <div className="mt-10 border-t border-border pt-8">
+            <p className="text-sm text-muted-foreground">
+              This scan gives you a first read. For a full technical review before you close, see the checklist or
+              book a nine-layer review.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-6">
+              <a
+                href="https://veritechdiligence.com/what-to-check-before-you-buy-a-web-based-business/"
+                className="btn-secondary"
+              >
+                Read the checklist <span className="arrow">→</span>
+              </a>
+              <a href="https://veritechdiligence.com/#contact" className="btn-secondary">
+                Book the nine-layer review <span className="arrow">→</span>
+              </a>
+            </div>
+          </div>
         </>
       )}
     </AppShell>

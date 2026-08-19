@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Veritech Scan — Technical Pre-Screening for Web-Based Business Acquisitions",
+  title: "Veritech Site Checker — Technical Pre-Screening for Web-Based Business Acquisitions",
 };
 
 export default function HomePage() {
@@ -107,26 +107,8 @@ export default function HomePage() {
         .landing .btn-primary .arrow { transition: transform 0.15s ease; display: inline-block; }
         .landing .btn-primary:hover .arrow { transform: translateX(3px); }
 
-        .landing .btn-secondary {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          color: var(--ink);
-          text-decoration: none;
-          border-bottom: 1px solid var(--ink);
-          padding: 14px 0;
-          font-size: 15px;
-          font-weight: 500;
-          transition: gap 0.15s ease;
-        }
-
-        .landing .btn-secondary:hover { gap: 12px; }
-
-        .landing .btn-secondary .arrow { transition: transform 0.15s ease; display: inline-block; }
-        .landing .btn-secondary:hover .arrow { transform: translateX(2px); }
-
         @media (prefers-reduced-motion: reduce) {
-          .landing .btn-primary, .landing .btn-secondary, .landing .arrow { transition: none; }
+          .landing .btn-primary, .landing .arrow { transition: none; }
         }
 
         /* ---------- Sections ---------- */
@@ -262,7 +244,7 @@ export default function HomePage() {
       <header className="hero">
         <div className="outer">
           <div className="hero-inner">
-            <p className="eyebrow">Veritech Scan — an automated tool from Veritech Diligence</p>
+            <p className="eyebrow">Veritech Site Checker — an automated tool from Veritech Diligence</p>
             <h1>Run an analysis on the site you&rsquo;re about to buy. See exactly what you need to know.</h1>
             <p className="standfirst">
               Enter the domain you&rsquo;re evaluating. Scan automatically checks what&rsquo;s already public, DNS
@@ -276,7 +258,7 @@ export default function HomePage() {
                 Sign in <span className="arrow">→</span>
               </Link>
               <a
-                href="mailto:hello@veritechdiligence.com?subject=Veritech%20Scan%20access"
+                href="mailto:hello@veritechdiligence.com?subject=Veritech%20Site%20Checker%20access"
                 className="btn-secondary"
               >
                 Request access <span className="arrow">→</span>
@@ -405,6 +387,9 @@ export default function HomePage() {
                 labels it as an observation, not a confirmed compromise.
               </p>
               <p>Scan gives you a first read. It does not replace the full nine-layer technical review once a target is worth pursuing further.</p>
+              <a href="https://veritechdiligence.com/#contact" className="btn-secondary">
+                See what the full review covers <span className="arrow">→</span>
+              </a>
             </div>
           </div>
         </div>
@@ -424,6 +409,9 @@ export default function HomePage() {
                 and before you commit budget to a full review.
               </p>
               <p>What comes back tells you where that review should focus, not just whether to run one.</p>
+              <a href="https://veritechdiligence.com/#contact" className="btn-secondary">
+                Book the nine-layer review <span className="arrow">→</span>
+              </a>
             </div>
           </div>
         </div>
@@ -435,7 +423,7 @@ export default function HomePage() {
             <p className="eyebrow">Access</p>
             <h2>Access is invite-only right now.</h2>
             <p>
-              Veritech Scan is in early access. If you already have an invitation, sign in below and run your first
+              Veritech Site Checker is in early access. If you already have an invitation, sign in below and run your first
               analysis. If you don&rsquo;t and want one, reach out and we&rsquo;ll get you set up.
             </p>
             <div className="cta-row">
@@ -443,7 +431,7 @@ export default function HomePage() {
                 Sign in <span className="arrow">→</span>
               </Link>
               <a
-                href="mailto:hello@veritechdiligence.com?subject=Veritech%20Scan%20access"
+                href="mailto:hello@veritechdiligence.com?subject=Veritech%20Site%20Checker%20access"
                 className="btn-secondary"
               >
                 Request access <span className="arrow">→</span>
@@ -455,7 +443,7 @@ export default function HomePage() {
 
       <footer>
         <div className="outer">
-          <p>Veritech Scan — a product of Veritech Diligence. © {new Date().getFullYear()} Medium &amp; Message.</p>
+          <p>Veritech Site Checker — a product of Veritech Diligence. © {new Date().getFullYear()} Medium &amp; Message.</p>
         </div>
       </footer>
     </div>

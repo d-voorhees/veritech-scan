@@ -67,7 +67,7 @@ flyctl secrets set \
   FLY_PRIMARY_REGION="iad" \
   APP_URL="https://${FLY_APP_NAME}.fly.dev" \
   MARKETING_SITE_URL="https://veritechdiligence.com" \
-  PRODUCT_NAME="Veritech Scan" \
+  NEXT_PUBLIC_PRODUCT_NAME="Veritech Site Checker" \
   PARENT_BRAND="Veritech Diligence" \
   JWT_SECRET="$(openssl rand -hex 32)" \
   INITIAL_ADMIN_EMAIL="you@example.com" \
@@ -146,9 +146,9 @@ Machine claims and processes one scan, and it's cleaned up afterward.
 ## Point a custom domain at the app (optional)
 
 ```bash
-flyctl certs create app.veritechdiligence.com --app "$FLY_APP_NAME"
+flyctl certs create sitechecker.veritechdiligence.com --app "$FLY_APP_NAME"
 # then add the DNS records flyctl prints, and update APP_URL accordingly
-flyctl secrets set APP_URL="https://app.veritechdiligence.com" --app "$FLY_APP_NAME"
+flyctl secrets set APP_URL="https://sitechecker.veritechdiligence.com" --app "$FLY_APP_NAME"
 ```
 
 ## Subsequent deploys

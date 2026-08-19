@@ -175,7 +175,7 @@ cd apps/web && npm run dev
 
 All configuration is via environment variables — see
 [`.env.example`](./.env.example) for the full list with defaults, including
-product identity (`PRODUCT_NAME`, `PARENT_BRAND`, `APP_DOMAIN`, ...), scan
+product identity (`NEXT_PUBLIC_PRODUCT_NAME`, `PARENT_BRAND`, `APP_DOMAIN`, ...), scan
 safety limits (`SCAN_MAX_PAGES`, `SCAN_DEFAULT_REQUEST_DELAY_SECONDS`,
 `SCAN_MAX_TOTAL_MINUTES`, `SCAN_CREATE_RATE_LIMIT_PER_HOUR`), and optional
 providers (`GOOGLE_PAGESPEED_API_KEY`, `SENTRY_DSN`). Never commit `.env` or
@@ -193,7 +193,7 @@ full walkthrough of every value:
 | `FLY_PRIMARY_REGION` | Region new scan-runner Machines are created in. |
 | `DATABASE_URL` | The Neon Postgres connection string (`postgresql+psycopg://...?sslmode=require`), set by hand from the Neon dashboard/CLI — not by Fly. `FLY_DATABASE_URL` is an alternate name the app also accepts, for the (unused here) case of `fly postgres attach` setting it automatically instead. |
 | `APP_URL` | The app's public URL. |
-| `MARKETING_SITE_URL`, `PRODUCT_NAME`, `PARENT_BRAND` | Product identity shown in the UI/API. |
+| `MARKETING_SITE_URL`, `NEXT_PUBLIC_PRODUCT_NAME`, `PARENT_BRAND` | Product identity shown in the UI/API. |
 | `JWT_SECRET` | Session signing secret. |
 | `INITIAL_ADMIN_EMAIL`, `INITIAL_ADMIN_PASSWORD` | Bootstrap admin account (`make seed`/`app.seed --admin-only`). |
 | `GOOGLE_PAGESPEED_API_KEY` | Optional — enables PageSpeed Insights metrics in the performance section. |
