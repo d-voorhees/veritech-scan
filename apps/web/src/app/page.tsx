@@ -209,7 +209,7 @@ export default function HomePage() {
           max-width: 680px;
         }
 
-        .landing .section h2 {
+        .landing h2 {
           font-size: 2.25rem;
           font-weight: 700;
           letter-spacing: -0.01em;
@@ -217,13 +217,13 @@ export default function HomePage() {
           line-height: 1.25em;
         }
 
-        .landing .section p {
+        .landing .copy {
           font-size: 1.0625rem;
           line-height: 1.7;
           margin: 0 0 16px 0;
         }
 
-        .landing .section p:last-child { margin-bottom: 0; }
+        .landing .copy:last-child { margin-bottom: 0; }
 
         /* ---------- Check table ---------- */
 
@@ -273,13 +273,7 @@ export default function HomePage() {
           max-width: 680px;
         }
 
-        .landing .access h2 {
-          font-size: 2.25rem;
-          font-weight: 700;
-          margin: 0 0 16px 0;
-        }
-
-        .landing .access p {
+        .landing .access-copy {
           font-size: 1.0625rem;
           color: var(--muted);
           margin: 0 0 32px 0;
@@ -307,7 +301,7 @@ export default function HomePage() {
           .landing .section { padding: 40px 0; }
           .landing .section-grid { grid-template-columns: 1fr; }
           .landing .section-num { padding-top: 0; margin-bottom: 12px; }
-          .landing .section h2 { font-size: 1.6rem; }
+          .landing h2 { font-size: 1.6rem; }
           .landing .check-table td.cat { width: 44%; }
           .landing .cta-row { gap: 20px; }
         }
@@ -352,13 +346,13 @@ export default function HomePage() {
             <div className="section-content">
               <p className="eyebrow">The question it answers</p>
               <h2>Is this worth a full technical review?</h2>
-              <p>
+              <p className="copy">
                 You&rsquo;re looking at a listing on Acquire.com, Flippa, or through a broker, and you need to know
                 quickly whether it holds up before you spend real time or ask a seller for system access. Scan
                 reads what&rsquo;s already public: the DNS records, the response headers, the homepage as
                 rendered, the dependencies it loads.
               </p>
-              <p>
+              <p className="copy">
                 It runs the moment you submit a domain, no scheduling and no waiting on an analyst, and returns a
                 prioritized answer in minutes rather than days: what&rsquo;s solid, what needs a closer look, and
                 what should stop you before you go further.
@@ -439,12 +433,12 @@ export default function HomePage() {
             <div className="section-content">
               <p className="eyebrow">How a finding becomes a finding</p>
               <h2>Every finding traces back to evidence.</h2>
-              <p>
+              <p className="copy">
                 A fixed set of twelve rules, not a person and not a model guessing, turns what Scan collects into
                 severity- and confidence-scored findings automatically. Click into any finding in the risk register
                 and see the exact HTTP response, DNS record, or rendered page behind it.
               </p>
-              <p>The system separates what it observed from what that observation might mean. A hardening opportunity is never presented as a confirmed vulnerability.</p>
+              <p className="copy">The system separates what it observed from what that observation might mean. A hardening opportunity is never presented as a confirmed vulnerability.</p>
             </div>
           </div>
         </div>
@@ -457,13 +451,13 @@ export default function HomePage() {
             <div className="section-content">
               <p className="eyebrow">What Scan does not do</p>
               <h2>A boundary, stated plainly.</h2>
-              <p>
+              <p className="copy">
                 Scan is fully automated and stays inside a fixed boundary. It only reads what&rsquo;s already
                 public, and it does not attempt to log in, test credentials, bypass access controls, or confirm a
                 vulnerability by exploiting it. Where it flags something that could be a security gap, the report
                 labels it as an observation, not a confirmed compromise.
               </p>
-              <p>Scan gives you a first read. It does not replace the full nine-layer technical review once a target is worth pursuing further.</p>
+              <p className="copy">Scan gives you a first read. It does not replace the full nine-layer technical review once a target is worth pursuing further.</p>
               <a href="https://veritechdiligence.com/#contact" className="btn-secondary">
                 See what the full review covers <span className="arrow">→</span>
               </a>
@@ -479,13 +473,13 @@ export default function HomePage() {
             <div className="section-content">
               <p className="eyebrow">Why it matters inside your window</p>
               <h2>Where to focus, not just whether to look further.</h2>
-              <p>
+              <p className="copy">
                 You&rsquo;re working inside a limited evaluation window, and most of what you need to decide
                 whether to go deeper is already sitting in public records and the page itself. Scan runs the moment
                 you enter a domain, before you ask a seller for access, before you spend a day checking it by hand,
                 and before you commit budget to a full review.
               </p>
-              <p>What comes back tells you where that review should focus, not just whether to run one.</p>
+              <p className="copy">What comes back tells you where that review should focus, not just whether to run one.</p>
               <a href="https://veritechdiligence.com/#contact" className="btn-secondary">
                 Book the nine-layer review <span className="arrow">→</span>
               </a>
@@ -499,7 +493,7 @@ export default function HomePage() {
           <div className="access-inner">
             <p className="eyebrow">Access</p>
             <h2>Veritech Site Checker is in early access.</h2>
-            <p>
+            <p className="access-copy">
               Enter your email, we&rsquo;ll send you a sign-in link, and you can
               run your first scan right away &mdash; no invitation needed.
             </p>

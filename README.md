@@ -8,7 +8,7 @@ It answers one practical question for a prospective buyer of a web-based busines
 
 > Is this web property worth deeper technical diligence, and what should I investigate next?
 
-Current version: v1.7. Release history in [CHANGELOG.md](CHANGELOG.md). Build story: [A Technical Due Diligence Scanner for Web-Business Buyers](https://dvoorhees.com/2026/08/15/building-a-technical-due-diligence-scanner-for-web-business-buyers/). Live app: [sitechecker.veritechdiligence.com](https://sitechecker.veritechdiligence.com).
+Current version: v1.8. Release history in [CHANGELOG.md](CHANGELOG.md). Build story: [A Technical Due Diligence Scanner for Web-Business Buyers](https://dvoorhees.com/2026/08/15/building-a-technical-due-diligence-scanner-for-web-business-buyers/). Live app: [sitechecker.veritechdiligence.com](https://sitechecker.veritechdiligence.com).
 
 **At a glance**
 - Stack: Next.js, FastAPI, PostgreSQL (Neon), Playwright/Chromium, Fly.io Machines

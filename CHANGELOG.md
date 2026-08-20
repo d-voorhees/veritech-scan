@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented in this file.
 
+## v1.8 — 2026-08-20
+
+### Changed
+
+- **Dashboard now guides first-time users toward their first scan.**
+  `apps/web/src/app/dashboard/page.tsx` previously showed the same stats
+  grid (Total scans / In progress / Product) and empty "Recent scans" list
+  to everyone, including a signed-in user who had never run a scan. When
+  `scans.length === 0`, the dashboard now replaces both with a single
+  onboarding card — a "Run your first scan" headline, a short explainer of
+  what a scan produces, a prominent "Start your first scan" CTA, and a
+  preview of the six check categories (site behavior and redirects, email
+  and domain posture, crawl and structure, technology stack, third-party
+  dependencies, performance) — so a new user's dashboard sets expectations
+  instead of showing all-zero stats and "No scans yet." The header's
+  redundant "New scan" button is hidden in this state since the CTA already
+  covers it; once a user has any scans, the dashboard reverts to the normal
+  stats-and-recent-scans view.
+
 ## v1.7 — 2026-08-20
 
 ### Added
