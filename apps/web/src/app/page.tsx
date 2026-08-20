@@ -51,6 +51,10 @@ export default function HomePage() {
           padding: 0 24px;
         }
 
+        @media (min-width: 1024px) {
+          .landing .outer { padding: 0 48px; }
+        }
+
         /* ---------- Site header ---------- */
 
         .landing .site-header {
@@ -102,21 +106,33 @@ export default function HomePage() {
         }
 
         .landing .hero h1 {
-          font-size: 3rem;
-          line-height: 1;
+          font-size: 2.25rem;
+          line-height: 1.05;
           font-weight: 800;
-          letter-spacing: -0.02em;
-          margin: 0 0 24px 0;
+          letter-spacing: -0.025em;
+          margin: 0 0 32px 0;
+        }
+
+        @media (min-width: 768px) {
+          .landing .hero h1 { font-size: 3rem; }
+        }
+
+        @media (min-width: 1024px) {
+          .landing .hero h1 { font-size: 3.25rem; line-height: 1; }
         }
 
         .landing .hero .standfirst {
-          font-size: 20px;
+          font-size: 1.125rem;
           font-variation-settings: normal;
-          font-weight: 500;
-          line-height: 1.6;
+          font-weight: 400;
+          line-height: 1.625;
           color: var(--ink);
-          margin: 0 0 40px 0;
-          max-width: 620px;
+          margin: 0 0 32px 0;
+          max-width: 680px;
+        }
+
+        @media (min-width: 768px) {
+          .landing .hero .standfirst { font-size: 1.25rem; }
         }
 
         .landing .cta-row {
@@ -288,8 +304,6 @@ export default function HomePage() {
 
         @media (max-width: 640px) {
           .landing .hero { padding: 56px 0 40px 0; }
-          .landing .hero h1 { font-size: 2.25rem; }
-          .landing .hero .standfirst { font-size: 1.0625rem; }
           .landing .section { padding: 40px 0; }
           .landing .section-grid { grid-template-columns: 1fr; }
           .landing .section-num { padding-top: 0; margin-bottom: 12px; }

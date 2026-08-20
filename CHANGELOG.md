@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file.
 
-## v7 — 2026-08-20
+## v1.7 — 2026-08-20
 
 ### Added
 
@@ -17,7 +17,7 @@ All notable changes to this project are documented in this file.
   shows a live `X / Y scans today` counter for every signed-in user (shared
   React Query cache, no extra request).
 
-## v6 — 2026-08-19
+## v1.6 — 2026-08-19
 
 ### Added
 
@@ -70,7 +70,7 @@ All notable changes to this project are documented in this file.
   reuse the existing `JWT_SECRET`/`APP_URL` rather than adding a second
   session secret or base-URL variable for the same purpose.
 
-## v5 — 2026-08-18
+## v1.5 — 2026-08-18
 
 ### Changed
 
@@ -100,7 +100,7 @@ All notable changes to this project are documented in this file.
   silently for half an hour. The Dockerfile's `runtime-base` stage installs
   `git` alongside its existing `curl`/`ca-certificates`/`gnupg` packages.
 
-## v4 — 2026-08-13
+## v1.4 — 2026-08-13
 
 ### Added
 
@@ -210,7 +210,7 @@ All notable changes to this project are documented in this file.
   response, not a broken measurement. Added an explanatory caption under
   the performance table instead of leaving the number unexplained.
 
-## v3 — 2026-08-13
+## v1.3 — 2026-08-13
 
 ### Changed
 
@@ -247,7 +247,7 @@ All notable changes to this project are documented in this file.
   same cluster. Profile link now uses the same rounded `hover:bg-muted`
   treatment (`app-shell.tsx`).
 
-## v2 — 2026-08-13
+## v1.2 — 2026-08-13
 
 ### Added
 
@@ -278,7 +278,7 @@ All notable changes to this project are documented in this file.
   only go stale again. Corrected the matching "13 rules"/"all 13 rules"
   references in `README.md` to 24.
 
-## v1 — 2026-08-12
+## v1.1 — 2026-08-12
 
 ### Added
 
