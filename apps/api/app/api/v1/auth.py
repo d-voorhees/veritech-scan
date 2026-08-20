@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import SESSION_COOKIE_NAME, get_current_user
 from app.config import get_settings
-from app.core.rate_limit import RateLimitExceeded, enforce_magic_link_request_rate_limit
+from app.core.rate_limit import RateLimitExceeded, enforce_magic_link_request_rate_limit, get_daily_scan_usage
 from app.db import SessionLocal, get_db
 from app.logging_config import get_logger
 from app.models.magic_link_token import MagicLinkToken
@@ -69,7 +69,8 @@ def logout(response: Response) -> dict:
 
 
 @router.get("/me", response_model=MeResponse)
-def me(user: User = Depends(get_current_user)) -> MeResponse:
+def me(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> MeResponse:
+    scans_used_today, scan_daily_limit = get_daily_scan_usage(db, user.id)
     return MeResponse(
         id=user.id,
         email=user.email,
@@ -77,6 +78,8 @@ def me(user: User = Depends(get_current_user)) -> MeResponse:
         role=user.role,
         organization_id=user.organization_id,
         organization_name=user.organization.name,
+        scans_used_today=scans_used_today,
+        scan_daily_limit=scan_daily_limit,
     )
 
 

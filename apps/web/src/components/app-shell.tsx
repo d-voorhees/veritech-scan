@@ -6,7 +6,7 @@ import { FileSearch, LayoutDashboard, ListChecks, LogOut, User } from "lucide-re
 
 import { Button } from "@/components/ui/button";
 import { productConfig } from "@/lib/config";
-import { useLogout } from "@/lib/use-auth";
+import { useLogout, useMe } from "@/lib/use-auth";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -18,6 +18,7 @@ const NAV_ITEMS = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const logout = useLogout();
+  const { data: me } = useMe();
 
   return (
     <div className="min-h-screen">
@@ -51,6 +52,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </nav>
           </div>
           <div className="flex items-center gap-3">
+            {me && (
+              <span
+                className="hidden text-xs font-medium text-muted-foreground sm:inline"
+                title={`Scans reset on a rolling 24-hour window. Need more? Contact danielle@veritechdiligence.com.`}
+              >
+                {me.scans_used_today} / {me.scan_daily_limit} scans today
+              </span>
+            )}
             <Link
               href="/settings"
               title="Profile"

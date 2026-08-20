@@ -37,5 +37,7 @@ class MeResponse(BaseModel):
     role: str
     organization_id: uuid.UUID
     organization_name: str
+    scans_used_today: int
+    scan_daily_limit: int
 
     model_config = {"from_attributes": True}

@@ -182,7 +182,8 @@ All configuration is via environment variables — see
 [`.env.example`](./.env.example) for the full list with defaults, including
 product identity (`NEXT_PUBLIC_PRODUCT_NAME`, `PARENT_BRAND`, `APP_DOMAIN`, ...), scan
 safety limits (`SCAN_MAX_PAGES`, `SCAN_DEFAULT_REQUEST_DELAY_SECONDS`,
-`SCAN_MAX_TOTAL_MINUTES`, `SCAN_CREATE_RATE_LIMIT_PER_HOUR`), and optional
+`SCAN_MAX_TOTAL_MINUTES`, `SCAN_CREATE_RATE_LIMIT_PER_HOUR`,
+`SCAN_CREATE_RATE_LIMIT_PER_DAY`), and optional
 providers (`GOOGLE_PAGESPEED_API_KEY`, `SENTRY_DSN`). Never commit `.env` or
 any `.env.*` file — all are gitignored.
 
@@ -318,8 +319,13 @@ Summarized here; full detail in `docs/threat-model.md`:
 - Never submits forms, authenticates, solves CAPTCHAs, or bypasses access
   controls.
 - Ephemeral browser context per scan — no cookie/session persistence.
-- Scan creation is rate-limited per user; magic-link requests are rate-limited
-  per IP (5/hr) to prevent using signup as an email-spam vector.
+- Scan creation is rate-limited per user: 10/hr as a burst guard, and
+  3/day (rolling 24h) as the real cap now that scans are free and
+  self-serve. A signed-in user sees their live `X / Y scans today` count in
+  the app header (`GET /auth/me`); hitting the daily cap returns a message
+  pointing them to danielle@veritechdiligence.com to discuss more usage.
+  Magic-link requests are rate-limited per IP (5/hr) to prevent using signup
+  as an email-spam vector.
 
 ## Known limitations
 

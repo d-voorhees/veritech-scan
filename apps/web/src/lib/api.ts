@@ -69,6 +69,8 @@ export interface Me {
   role: string;
   organization_id: string;
   organization_name: string;
+  scans_used_today: number;
+  scan_daily_limit: number;
 }
 
 export interface ScanJob {

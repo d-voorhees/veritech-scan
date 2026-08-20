@@ -51,6 +51,45 @@ export default function HomePage() {
           padding: 0 24px;
         }
 
+        /* ---------- Site header ---------- */
+
+        .landing .site-header {
+          border-bottom: 1px solid var(--rule);
+        }
+
+        .landing .site-header-inner {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 24px;
+          padding: 20px 0;
+        }
+
+        .landing .brand {
+          font-family: var(--font-mono), monospace;
+          font-size: 0.6875rem;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+          color: var(--ink);
+          text-decoration: none;
+        }
+
+        .landing .btn-header {
+          display: inline-flex;
+          align-items: center;
+          background: var(--accent);
+          color: var(--paper);
+          text-decoration: none;
+          padding: 10px 20px;
+          font-size: 14px;
+          font-weight: 500;
+          border: none;
+          transition: background 0.15s ease;
+          white-space: nowrap;
+        }
+
+        .landing .btn-header:hover { background: var(--accent-hover); }
+
         /* ---------- Hero ---------- */
 
         .landing .hero {
@@ -260,7 +299,18 @@ export default function HomePage() {
         }
       `}</style>
 
-      <header className="hero">
+      <header className="site-header">
+        <div className="outer site-header-inner">
+          <Link href="/" className="brand">
+            Veritech Diligence
+          </Link>
+          <Link href="/login" className="btn-header">
+            Scan a site
+          </Link>
+        </div>
+      </header>
+
+      <section className="hero">
         <div className="outer">
           <div className="hero-inner">
             <p className="eyebrow">Veritech Site Checker — an automated tool from Veritech Diligence</p>
@@ -279,7 +329,7 @@ export default function HomePage() {
             </div>
           </div>
         </div>
-      </header>
+      </section>
 
       <section className="section">
         <div className="outer">
@@ -434,9 +484,9 @@ export default function HomePage() {
         <div className="outer">
           <div className="access-inner">
             <p className="eyebrow">Access</p>
-            <h2>Every scan is free right now.</h2>
+            <h2>Veritech Site Checker is in early access.</h2>
             <p>
-              Veritech Site Checker is in early access. Enter your email, we&rsquo;ll send you a sign-in link, and you can
+              Enter your email, we&rsquo;ll send you a sign-in link, and you can
               run your first scan right away &mdash; no invitation needed.
             </p>
             <div className="cta-row">
@@ -450,7 +500,7 @@ export default function HomePage() {
 
       <footer>
         <div className="outer">
-          <p>Veritech Site Checker — a product of Veritech Diligence. © {new Date().getFullYear()} Medium &amp; Message.</p>
+          <p>Veritech Site Checker — a product of <a href="https://veritechdiligence.com">Veritech Diligence</a> {new Date().getFullYear()}.</p>
         </div>
       </footer>
     </div>

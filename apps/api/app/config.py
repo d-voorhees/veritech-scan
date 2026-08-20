@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     scan_max_pages: int = 50
     scan_page_timeout_seconds: int = 15
     scan_create_rate_limit_per_hour: int = 10
+    scan_create_rate_limit_per_day: int = 3
 
     google_pagespeed_api_key: str = ""
     sentry_dsn: str = ""

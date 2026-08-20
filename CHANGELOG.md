@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## v7 — 2026-08-20
+
+### Added
+
+- **Daily scan cap, plus a visible usage counter.**
+  `enforce_scan_creation_rate_limit` (`app/core/rate_limit.py`) now checks a
+  rolling-24h count per user against `SCAN_CREATE_RATE_LIMIT_PER_DAY`
+  (default 3) in addition to the existing rolling-1h burst guard
+  (`SCAN_CREATE_RATE_LIMIT_PER_HOUR`, default 10). Hitting the daily cap
+  returns a 429 with a message pointing the user to
+  danielle@veritechdiligence.com to discuss more usage. `GET /auth/me` now
+  also returns `scans_used_today` / `scan_daily_limit`, and the app header
+  shows a live `X / Y scans today` counter for every signed-in user (shared
+  React Query cache, no extra request).
+
 ## v6 — 2026-08-19
 
 ### Added

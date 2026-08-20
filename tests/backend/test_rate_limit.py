@@ -34,8 +34,9 @@ def _make_scan(db, user, created_at):
     return scan
 
 
-def test_allows_scans_under_the_limit(db, user):
-    limit = get_settings().scan_create_rate_limit_per_hour
+def test_allows_scans_under_both_limits(db, user):
+    settings = get_settings()
+    limit = min(settings.scan_create_rate_limit_per_hour, settings.scan_create_rate_limit_per_day)
     now = datetime.now(timezone.utc)
     for _ in range(limit - 1):
         _make_scan(db, user, now)
@@ -43,7 +44,7 @@ def test_allows_scans_under_the_limit(db, user):
     enforce_scan_creation_rate_limit(db, user.id)  # should not raise
 
 
-def test_blocks_scans_at_the_limit(db, user):
+def test_blocks_scans_at_the_hourly_limit(db, user):
     limit = get_settings().scan_create_rate_limit_per_hour
     now = datetime.now(timezone.utc)
     for _ in range(limit):
@@ -52,13 +53,29 @@ def test_blocks_scans_at_the_limit(db, user):
     try:
         enforce_scan_creation_rate_limit(db, user.id)
         assert False, "expected RateLimitExceeded"
-    except RateLimitExceeded:
-        pass
+    except RateLimitExceeded as exc:
+        assert "per hour" in str(exc)
 
 
-def test_scans_older_than_one_hour_do_not_count(db, user):
-    limit = get_settings().scan_create_rate_limit_per_hour
-    stale = datetime.now(timezone.utc) - timedelta(hours=2)
+def test_blocks_scans_at_the_daily_limit_even_outside_the_hourly_window(db, user):
+    settings = get_settings()
+    assert settings.scan_create_rate_limit_per_day < settings.scan_create_rate_limit_per_hour
+    limit = settings.scan_create_rate_limit_per_day
+    stale_hour_but_fresh_day = datetime.now(timezone.utc) - timedelta(hours=2)
+    for _ in range(limit):
+        _make_scan(db, user, stale_hour_but_fresh_day)
+
+    try:
+        enforce_scan_creation_rate_limit(db, user.id)
+        assert False, "expected RateLimitExceeded"
+    except RateLimitExceeded as exc:
+        assert "scans a day" in str(exc)
+        assert "danielle@veritechdiligence.com" in str(exc)
+
+
+def test_scans_older_than_one_day_do_not_count(db, user):
+    limit = get_settings().scan_create_rate_limit_per_day
+    stale = datetime.now(timezone.utc) - timedelta(hours=25)
     for _ in range(limit + 5):
         _make_scan(db, user, stale)
 
@@ -66,7 +83,7 @@ def test_scans_older_than_one_hour_do_not_count(db, user):
 
 
 def test_rate_limit_is_per_user(db, user, admin_user):
-    limit = get_settings().scan_create_rate_limit_per_hour
+    limit = get_settings().scan_create_rate_limit_per_day
     now = datetime.now(timezone.utc)
     for _ in range(limit):
         _make_scan(db, user, now)
