@@ -63,15 +63,16 @@ export default function HomePage() {
         }
 
         .landing .hero h1 {
-          font-size: 3.75rem;
-          line-height: 1.05;
+          font-size: 3rem;
+          line-height: 1;
           font-weight: 800;
           letter-spacing: -0.02em;
           margin: 0 0 24px 0;
         }
 
         .landing .hero .standfirst {
-          font-size: 1.1875rem;
+          font-size: 20px;
+          font-variation-settings: normal;
           font-weight: 500;
           line-height: 1.6;
           color: var(--ink);
