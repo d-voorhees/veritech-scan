@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented in this file.
 
+## v1.9 — 2026-08-20
+
+### Added
+
+- **First-time magic-link users are prompted to set a password.**
+  `GET /auth/me` now returns `has_password`, and a new
+  `POST /auth/set-password` (`apps/api/app/api/v1/auth.py`) lets an
+  authenticated user set one — only once, since it 400s if
+  `hashed_password` is already set. Password strength is checked
+  server-side (`password_strength_error` in
+  `apps/api/app/security/passwords.py`): at least 10 characters, with
+  both a letter and a number. On the frontend, `AppShell` renders a
+  blocking `SetPasswordPrompt` (`apps/web/src/components/set-password-prompt.tsx`)
+  over every authenticated page for any signed-in user with
+  `has_password === false`, so a magic-link user sets a password the
+  first time they land on the dashboard. Once set, they can sign back in
+  either through a new magic link or the existing password form on
+  `/login`.
+
 ## v1.8 — 2026-08-20
 
 ### Changed

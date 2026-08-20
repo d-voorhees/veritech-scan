@@ -55,6 +55,14 @@ export function useRequestMagicLink() {
   });
 }
 
+export function useSetPassword() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (password: string) => api.setPassword(password),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["me"] }),
+  });
+}
+
 export function useVerifyMagicLink() {
   const queryClient = useQueryClient();
   const router = useRouter();

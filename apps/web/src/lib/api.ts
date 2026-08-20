@@ -71,6 +71,7 @@ export interface Me {
   organization_name: string;
   scans_used_today: number;
   scan_daily_limit: number;
+  has_password: boolean;
 }
 
 export interface ScanJob {
@@ -191,6 +192,11 @@ export const api = {
     request<{ access_token: string; token_type: string }>("/auth/verify", {
       method: "POST",
       body: JSON.stringify({ token }),
+    }),
+  setPassword: (password: string) =>
+    request<{ ok: boolean }>("/auth/set-password", {
+      method: "POST",
+      body: JSON.stringify({ password }),
     }),
 
   listScans: () => request<ScanSummary[]>("/scans"),

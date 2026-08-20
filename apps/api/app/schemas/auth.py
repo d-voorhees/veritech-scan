@@ -30,6 +30,10 @@ class VerifyTokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class SetPasswordRequest(BaseModel):
+    password: str
+
+
 class MeResponse(BaseModel):
     id: uuid.UUID
     email: str
@@ -39,5 +43,6 @@ class MeResponse(BaseModel):
     organization_name: str
     scans_used_today: int
     scan_daily_limit: int
+    has_password: bool
 
     model_config = {"from_attributes": True}

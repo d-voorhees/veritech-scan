@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { FileSearch, LayoutDashboard, ListChecks, LogOut, User } from "lucide-react";
 
+import { SetPasswordPrompt } from "@/components/set-password-prompt";
 import { Button } from "@/components/ui/button";
 import { productConfig } from "@/lib/config";
 import { useLogout, useMe } from "@/lib/use-auth";
@@ -22,6 +23,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen">
+      <SetPasswordPrompt />
       <header className="border-b-2 border-primary bg-background">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
           <div className="flex items-center gap-8">

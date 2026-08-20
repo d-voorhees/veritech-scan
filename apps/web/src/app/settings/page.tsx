@@ -36,9 +36,6 @@ export default function SettingsPage() {
               <dd className="mt-0.5">{me?.organization_name}</dd>
             </div>
           </dl>
-          <p className="mt-4 text-xs text-muted-foreground">
-            Profile editing and password changes are not yet available in this MVP.
-          </p>
         </CardContent>
       </Card>
     </AppShell>

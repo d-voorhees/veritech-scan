@@ -18,11 +18,12 @@ from app.schemas.auth import (
     MeResponse,
     RequestLinkRequest,
     RequestLinkResponse,
+    SetPasswordRequest,
     VerifyTokenRequest,
     VerifyTokenResponse,
 )
 from app.security.magic_link import generate_magic_link_token, hash_magic_link_token
-from app.security.passwords import verify_password
+from app.security.passwords import hash_password, password_strength_error, verify_password
 from app.security.tokens import create_access_token
 from app.services.brevo_client import BrevoClient, BrevoError
 from app.services.mailerlite_client import MailerLiteClient, MailerLiteError
@@ -80,7 +81,24 @@ def me(user: User = Depends(get_current_user), db: Session = Depends(get_db)) ->
         organization_name=user.organization.name,
         scans_used_today=scans_used_today,
         scan_daily_limit=scan_daily_limit,
+        has_password=user.hashed_password is not None,
     )
+
+
+@router.post("/set-password")
+def set_password(
+    payload: SetPasswordRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)
+) -> dict:
+    if user.hashed_password is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password already set.")
+
+    error = password_strength_error(payload.password)
+    if error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+
+    user.hashed_password = hash_password(payload.password)
+    db.commit()
+    return {"ok": True}
 
 
 @router.post("/request-link", response_model=RequestLinkResponse)
