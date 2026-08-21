@@ -994,3 +994,50 @@ def test_mixed_content_does_not_fire_when_none_observed(db, scan_request):
         .first()
         is None
     )
+
+
+def test_one_bad_rule_result_does_not_wipe_out_other_findings(db, scan_request, monkeypatch):
+    """Regression test: a rule that returns a RuleResult violating a DB
+    constraint (e.g. a missing required field) used to abort the whole
+    transaction, silently discarding every finding from rules that had
+    already fired correctly earlier in the same run.
+    """
+    import app.rules.engine as engine_module
+    from veritech_scan_rules import RuleResult
+
+    def broken_rule(context):
+        return RuleResult(
+            rule_key="test_broken_rule",
+            version=1,
+            category="email_deliverability",
+            severity="info",
+            confidence="medium",
+            title="Broken test rule",
+            impact="n/a",
+            recommended_next_step="n/a",
+            dollar_impact=None,  # violates the NOT NULL constraint on findings.dollar_impact
+            remediation_timing="n/a",
+        )
+
+    def good_rule(context):
+        return RuleResult(
+            rule_key="test_good_rule",
+            version=1,
+            category="email_deliverability",
+            severity="info",
+            confidence="medium",
+            title="Good test rule",
+            impact="n/a",
+            recommended_next_step="n/a",
+            dollar_impact="$0",
+            remediation_timing="n/a",
+        )
+
+    monkeypatch.setattr(engine_module, "all_rules", lambda: [broken_rule, good_rule])
+
+    created_ids = run_rules_engine(db, scan_request)
+
+    titles = {f.title for f in db.query(Finding).filter(Finding.scan_request_id == scan_request.id).all()}
+    assert "Good test rule" in titles
+    assert "Broken test rule" not in titles
+    assert len(created_ids) == 1

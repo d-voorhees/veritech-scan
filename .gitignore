@@ -52,3 +52,6 @@ npm-debug.log*
 *.pem
 *.key
 secrets/
+
+# Claude Code local settings (personal, not shared)
+.claude/settings.local.json

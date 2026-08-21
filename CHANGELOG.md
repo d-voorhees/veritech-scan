@@ -2,6 +2,29 @@
 
 All notable changes to this project are documented in this file.
 
+## v1.10 — 2026-08-21
+
+### Fixed
+
+- **One bad rule result could silently wipe out every finding in a scan.**
+  `run_rules_engine` (`apps/api/app/rules/engine.py`) flushed each `Finding`
+  row in the same open transaction with no isolation between rules — when a
+  single rule returned a result that violated a DB constraint (seen in
+  production: a rule left `dollar_impact` null), the whole transaction
+  aborted and every finding from rules that had already fired correctly
+  earlier in the same run was discarded along with it, silently producing a
+  0-finding `completed_with_warnings` scan. Each rule's finding is now
+  persisted inside its own savepoint (`db.begin_nested()`); a bad result is
+  logged and skipped without affecting any other rule.
+- **Scan-completion notification outcomes are now queryable, not just
+  logged.** The Slack "Scan Completed" alert and the results-copy email
+  (`apps/api/app/runner/run.py`) previously reported failure only via
+  `logger.warning`, which lives in an ephemeral log buffer — after the
+  fact there was no way to tell whether a given scan's alert actually
+  fired. Both now also record a `ScanEvent` (`slack_completion_notification_sent`/`_failed`,
+  `results_email_sent`/`_failed`/`_skipped`, `brevo_scan_summary_sync_failed`)
+  so the outcome is permanently attached to the scan.
+
 ## v1.9 — 2026-08-20
 
 ### Added

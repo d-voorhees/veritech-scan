@@ -58,9 +58,7 @@
   pre { white-space: pre-wrap; word-break: break-word; background: #fff; border: 1px solid #e5e8ec; padding: 0.5rem; border-radius: 4px; font-size: 0.72rem; }
   .limitations li { margin-bottom: 0.4rem; font-size: 0.85rem; }
   .footer-note { margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid #d9dde3; font-size: 0.75rem; color: #5b6472; }
-  .print-actions { margin: 1rem 0; }
-  .print-actions button { font: inherit; padding: 0.5rem 1rem; border-radius: 6px; border: 1px solid #33404d; background: #1a1f27; color: white; cursor: pointer; }
-  @media print { .print-actions { display: none; } body { padding: 0.5in; } }
+  @media print { body { padding: 0.5in; } }
   .empty-note { color: #5b6472; font-size: 0.85rem; font-style: italic; }
   .coverage-banner { border: 2px solid; border-radius: 8px; padding: 0.9rem 1rem; margin: 1rem 0; font-size: 0.9rem; }
   .coverage-banner.blocked { border-color: #d64545; background: #fbe1e1; color: #7a1f1f; }
@@ -86,8 +84,6 @@
 {% macro dt(value) -%}
 {% if value %}<span class="dt" data-utc="{{ value.isoformat() }}">{{ value.strftime('%Y-%m-%d %H:%M UTC') }}</span>{% else %}—{% endif %}
 {%- endmacro %}
-
-<div class="print-actions"><button onclick="window.print()">Print / Save as PDF</button></div>
 
 <div class="eyebrow">{{ report.parent_brand }}</div>
 <h1>{{ report.report_name }}</h1>
@@ -480,6 +476,7 @@
   opportunities" are not confirmed vulnerabilities. Generated {{ dt(report.generated_at) }}.
 </div>
 
+{% if not for_email %}
 <script>
   document.querySelectorAll(".dt").forEach(function (el) {
     var parsed = new Date(el.dataset.utc);
@@ -488,6 +485,7 @@
     }
   });
 </script>
+{% endif %}
 
 </body>
 </html>

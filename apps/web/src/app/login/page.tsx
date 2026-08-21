@@ -21,9 +21,8 @@ function SessionExpiredBanner() {
   );
 }
 
-function MagicLinkForm() {
+function MagicLinkForm({ sent, onSent }: { sent: boolean; onSent: () => void }) {
   const [email, setEmail] = useState("");
-  const [sent, setSent] = useState(false);
   const requestLink = useRequestMagicLink();
 
   if (sent) {
@@ -39,7 +38,7 @@ function MagicLinkForm() {
       className="flex flex-col gap-4"
       onSubmit={(e) => {
         e.preventDefault();
-        requestLink.mutate(email, { onSuccess: () => setSent(true) });
+        requestLink.mutate(email, { onSuccess: onSent });
       }}
     >
       <div className="flex flex-col gap-1.5">
@@ -114,6 +113,7 @@ function PasswordForm() {
 
 export default function LoginPage() {
   const [usePassword, setUsePassword] = useState(false);
+  const [magicLinkSent, setMagicLinkSent] = useState(false);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -123,22 +123,30 @@ export default function LoginPage() {
           <CardTitle className="text-xl font-bold tracking-tight text-foreground">
             {productConfig.productName}
           </CardTitle>
-          <CardDescription>
-            {usePassword ? "Sign in with your account." : "Enter your email and we'll send you a sign-in link."}
-          </CardDescription>
+          {!magicLinkSent && (
+            <CardDescription>
+              {usePassword ? "Sign in with your account." : "Enter your email and we'll send you a sign-in link."}
+            </CardDescription>
+          )}
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <Suspense fallback={null}>
             <SessionExpiredBanner />
           </Suspense>
-          {usePassword ? <PasswordForm /> : <MagicLinkForm />}
-          <button
-            type="button"
-            className="text-left text-sm text-muted-foreground underline"
-            onClick={() => setUsePassword((v) => !v)}
-          >
-            {usePassword ? "Use a sign-in link instead" : "Sign in with a password instead"}
-          </button>
+          {usePassword ? (
+            <PasswordForm />
+          ) : (
+            <MagicLinkForm sent={magicLinkSent} onSent={() => setMagicLinkSent(true)} />
+          )}
+          {(usePassword || !magicLinkSent) && (
+            <button
+              type="button"
+              className="text-left text-sm text-muted-foreground underline"
+              onClick={() => setUsePassword((v) => !v)}
+            >
+              {usePassword ? "Use a sign-in link instead" : "Sign in with a password instead"}
+            </button>
+          )}
         </CardContent>
       </Card>
     </div>

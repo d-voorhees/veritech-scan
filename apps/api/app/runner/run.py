@@ -40,7 +40,7 @@ from app.models.user import User
 from app.rules.engine import run_rules_engine
 from app.services.artifact_storage import get_artifact_storage
 from app.services.brevo_client import BrevoClient, BrevoError
-from app.services.html_export import render_report_html
+from app.services.html_export import render_report_html, render_report_text
 from app.services.report_builder import build_report
 from app.services.report_summary import build_brevo_summary
 from app.services.scan_orchestrator import record_event
@@ -306,6 +306,7 @@ def run_scan(scan_id: str, runner_machine_id: str | None = None) -> int:
             try:
                 report = build_report(db, scan)
                 html = render_report_html(report)
+                email_html = render_report_html(report, for_email=True)
                 storage = get_artifact_storage()
                 path = storage.save(f"{scan.id}/report.html", html.encode("utf-8"))
 
@@ -340,10 +341,14 @@ def run_scan(scan_id: str, runner_machine_id: str | None = None) -> int:
                                 )
                     except BrevoError as exc:
                         logger.warning("brevo_scan_summary_sync_failed", scan_id=scan_id, error=str(exc))
+                        record_event(db, scan.id, "brevo_scan_summary_sync_failed", str(exc)[:500])
 
                     # Each of the two notifications below is independently
                     # wrapped — a Slack outage must never prevent the
-                    # results-copy email, and vice versa.
+                    # results-copy email, and vice versa. Both outcomes are
+                    # also recorded as scan events (not just server logs,
+                    # which are ephemeral) so "did the alert actually fire"
+                    # stays answerable after the fact.
                     try:
                         send_slack_notification(
                             settings.slack_webhook_url,
@@ -354,8 +359,10 @@ def run_scan(scan_id: str, runner_machine_id: str | None = None) -> int:
                                 f"*Report:* {report_url}"
                             ),
                         )
+                        record_event(db, scan.id, "slack_completion_notification_sent", "Slack completion alert sent.")
                     except SlackError as exc:
                         logger.warning("slack_scan_completed_notification_failed", scan_id=scan_id, error=str(exc))
+                        record_event(db, scan.id, "slack_completion_notification_failed", str(exc)[:500])
 
                     if settings.results_notification_email and settings.brevo_api_key:
                         try:
@@ -365,10 +372,25 @@ def run_scan(scan_id: str, runner_machine_id: str | None = None) -> int:
                                     sender_email=settings.brevo_sender_email,
                                     sender_name=settings.brevo_sender_name,
                                     subject=f"Scan completed: {scan.normalized_domain}",
-                                    html_content=html,
+                                    html_content=email_html,
+                                    text_content=render_report_text(email_html),
                                 )
+                            record_event(
+                                db,
+                                scan.id,
+                                "results_email_sent",
+                                f"Results copy emailed to {settings.results_notification_email}.",
+                            )
                         except BrevoError as exc:
                             logger.warning("results_copy_email_failed", scan_id=scan_id, error=str(exc))
+                            record_event(db, scan.id, "results_email_failed", str(exc)[:500])
+                    else:
+                        record_event(
+                            db,
+                            scan.id,
+                            "results_email_skipped",
+                            "Results copy email skipped: RESULTS_NOTIFICATION_EMAIL or BREVO_API_KEY not configured.",
+                        )
 
                 db.add(report_row)
                 record_event(db, scan.id, "report_finalized", "Report generated and stored.")

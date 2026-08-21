@@ -79,21 +79,33 @@ class BrevoClient:
             }
         self._request("POST", "/smtp/email", json=payload)
 
-    def send_html_email(self, *, to_email: str, sender_email: str, sender_name: str, subject: str, html_content: str) -> None:
+    def send_html_email(
+        self,
+        *,
+        to_email: str,
+        sender_email: str,
+        sender_name: str,
+        subject: str,
+        html_content: str,
+        text_content: str | None = None,
+    ) -> None:
         """Plain inline-HTML transactional send — used for the completed-scan
         results copy, which has no dashboard template (unlike the magic-link
         email, this isn't Danielle's copy to write; it's an internal ops
         notification).
         """
+        payload = {
+            "sender": {"name": sender_name, "email": sender_email},
+            "to": [{"email": to_email}],
+            "subject": subject,
+            "htmlContent": html_content,
+        }
+        if text_content is not None:
+            payload["textContent"] = text_content
         self._request(
             "POST",
             "/smtp/email",
-            json={
-                "sender": {"name": sender_name, "email": sender_email},
-                "to": [{"email": to_email}],
-                "subject": subject,
-                "htmlContent": html_content,
-            },
+            json=payload,
         )
 
     def upsert_contact(self, *, email: str, attributes: dict) -> None:
